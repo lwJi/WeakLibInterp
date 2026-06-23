@@ -111,6 +111,7 @@ REGISTERED_SPECS=(
   "eos-inversion.md"
   "table-format-and-io.md"
   "opacity-emab-iso.md"
+  "opacity-nes-pair.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -137,6 +138,12 @@ SPEC_REQUIRE_IN_SPEC=(
   "opacity-emab-iso.md|||LogInterpolateSingleVariable_4D_Custom_Point"
   "opacity-emab-iso.md|||wlInterpolationModule.F90"
   "opacity-emab-iso.md|||wlOpacityFieldsModule.f90"
+  "opacity-nes-pair.md|||LogInterpolateSingleVariable_2D2D_Custom_Aligned"
+  "opacity-nes-pair.md|||exp((E − E') / T)"
+  "opacity-nes-pair.md|||crossing symmetry"
+  "opacity-nes-pair.md|||detailed balance"
+  "opacity-nes-pair.md|||wlInterpolationModule.F90"
+  "opacity-nes-pair.md|||wlOpacityInterpolationModule.f90"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -167,6 +174,13 @@ SPEC_REQUIRE_IN_SNAPSHOT=(
   # /Scat_Iso_Kernels/Offsets is a 2D {2, 2} (nOpacities, nMoments) dataset.
   "opacity-emab-iso.md|||wl-Op-SFHo-15-25-50-E40-EmAb.h5ls|||/EmAb/Offsets            Dataset {2}"
   "opacity-emab-iso.md|||wl-Op-SFHo-15-25-50-E40-Iso.h5ls|||/Scat_Iso_Kernels/Offsets Dataset {2, 2}"
+  # opacity-nes-pair: anchor the 5D kernel-table geometry and the 2D offset-dimensionality
+  # claims to the committed snapshots — both NES and Pair carry a {120, 81, 4, 40, 40}
+  # Kernels dataset (Fortran (nE', nE, nMom, nT, nEta)) and a 2D {4, 1} Offsets dataset.
+  "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-NES.h5ls|||/Scat_NES_Kernels/Kernels Dataset {120, 81, 4, 40, 40}"
+  "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-NES.h5ls|||/Scat_NES_Kernels/Offsets Dataset {4, 1}"
+  "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Kernels Dataset {120, 81, 4, 40, 40}"
+  "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Offsets Dataset {4, 1}"
 )
 
 # --------------------------------------------------------------------------------------
