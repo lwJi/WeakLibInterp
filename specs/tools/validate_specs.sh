@@ -110,6 +110,7 @@ REGISTERED_SPECS=(
   "eos-interpolation.md"
   "eos-inversion.md"
   "table-format-and-io.md"
+  "opacity-emab-iso.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -133,6 +134,9 @@ SPEC_REQUIRE_IN_SPEC=(
   "table-format-and-io.md|||EmAb_CorrectedAbsorption"
   "table-format-and-io.md|||wlEOSIOModuleHDF.f90"
   "table-format-and-io.md|||wlOpacityTableIOModuleHDF.f90"
+  "opacity-emab-iso.md|||LogInterpolateSingleVariable_4D_Custom_Point"
+  "opacity-emab-iso.md|||wlInterpolationModule.F90"
+  "opacity-emab-iso.md|||wlOpacityFieldsModule.f90"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -158,6 +162,11 @@ SPEC_REQUIRE_IN_SNAPSHOT=(
   "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-NES.h5ls|||/Scat_NES_Kernels/Kernels"
   "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Kernels"
   "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-Brem.h5ls|||/Scat_Brem_Kernels/S_sigma"
+  # opacity-emab-iso: anchor the EmAb-1D vs Iso-2D offset-dimensionality claims to the
+  # committed snapshots — the EmAb /EmAb/Offsets is a 1D {2} dataset, the Iso
+  # /Scat_Iso_Kernels/Offsets is a 2D {2, 2} (nOpacities, nMoments) dataset.
+  "opacity-emab-iso.md|||wl-Op-SFHo-15-25-50-E40-EmAb.h5ls|||/EmAb/Offsets            Dataset {2}"
+  "opacity-emab-iso.md|||wl-Op-SFHo-15-25-50-E40-Iso.h5ls|||/Scat_Iso_Kernels/Offsets Dataset {2, 2}"
 )
 
 # --------------------------------------------------------------------------------------

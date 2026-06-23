@@ -28,7 +28,7 @@ Open any single spec file in isolation: it is self-contained. The two cross-cutt
 | [eos-interpolation](./eos-interpolation.md) | EOS single-variable 3D `(ρ,T,Yₑ)` trilinear-in-log evaluate + differentiate `_Point` contract. | committed |
 | [eos-inversion](./eos-inversion.md) | Recover T from `(ρ, X∈{E,P,S}, Yₑ)` via node bisection + log-linear inverse; integer error codes, `T=0`-on-failure, round-trip invariant. | committed |
 | [table-format-and-io](./table-format-and-io.md) | On-disk HDF5 reader contract: EOS/opacity group + dataset names, shapes, dtypes, per-channel offsets, column-major reversal, legacy fallbacks. | committed |
-| opacity-emab-iso | EmAb 4D `(E,ρ,T,Yₑ)` and Iso 5D `(E,moment,ρ,T,Yₑ)` opacity channels sharing the EOS thermodynamic axes. | planned (Phase 4) |
+| [opacity-emab-iso](./opacity-emab-iso.md) | EmAb 4D `(E,ρ,T,Yₑ)` and Iso 5D `(E,moment,ρ,T,Yₑ)` opacity channels sharing the EOS thermodynamic axes; shared 4D `_Point` kernel, EmAb 1D vs Iso 2D offsets, moment index not interpolated. | committed |
 | opacity-nes-pair | NES + Pair 5D `(E',E,kernel,T,η)` channels; detailed-balance and crossing-symmetry invariants; `_2D2D_Custom_Aligned` consumer path. | planned (Phase 5) |
 | opacity-brem | Brem 5D `(E',E,moment,ρ,T)` channel; `[1,1,28/3]` effective-density decomposition; no symmetry fill. | planned (Phase 6) |
 | regression-suite-design | The two-layer scheme as a runnable coverage matrix; tolerance tiers; assert-against-tolerance pass/fail; C++/AMReX-only. | planned (Phase 7) |
