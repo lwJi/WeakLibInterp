@@ -1,0 +1,63 @@
+# Provenance manifest for the committed structural snapshots
+#
+# This file documents WHERE each `specs/fixtures/*.h5ls` snapshot came from.
+# It is NOT a CI gate. The default (CI-reproducible) validator mode checksums the
+# small committed `*.h5ls` snapshots themselves; the big-table `sha256` recorded
+# here is verified only by the opt-in provenance/refresh mode
+# (`WL_TABLES_ROOT=... bash specs/tools/validate_specs.sh`), which re-derives each
+# snapshot from the live multi-GB `.h5` table and SKIPS loudly when the tables are absent.
+#
+# Format: one record per pinned production table, blank-line separated.
+#   key: value
+#
+# Fields:
+#   table            basename of the production .h5 file (relative to $WL_TABLES_ROOT)
+#   source_set       provenance / version note for the table set
+#   weaklib_commit   weaklib source revision whose writers produced this on-disk layout
+#   table_sha256     sha256 of the live multi-GB .h5 (refresh-mode check only)
+#   snapshot         the committed specs/fixtures/*.h5ls produced by `h5ls -r <table>`
+#   snapshot_sha256  sha256 of the committed snapshot (default-mode CI check)
+#
+# Snapshots were generated once with:
+#   h5ls -r <table> > specs/fixtures/<basename>.h5ls
+# from the canonical clean production set at
+#   /Users/liwei/Datas/wl_tables/use_for_production/
+# (h5ls 1.14.x, HDF5 from /opt/homebrew). Re-derive with refresh mode to confirm no drift.
+
+source_set: weaklib production SFHo set, use_for_production (clean canonical copy)
+
+table: wl-EOS-SFHo-15-25-50.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: 577a8a0ad38d0edd05f24f9023cb669a0aa46d4c4aef7d49b6fa0392051abe7d
+snapshot: wl-EOS-SFHo-15-25-50.h5ls
+snapshot_sha256: 9783c4d7d79b1423dc7c5193ed21fb693e4eaf456efb4f866ab73789167226c1
+
+table: wl-Op-SFHo-15-25-50-E40-EmAb.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: 866bd4dac47cf45577218b2b4efa53cdadd8d8adf88c39cc6fed03ebe2c629bf
+snapshot: wl-Op-SFHo-15-25-50-E40-EmAb.h5ls
+snapshot_sha256: c014051eb1e5848d690e796b63664d65e6802897049f1bd33640bc738f2e76aa
+
+table: wl-Op-SFHo-15-25-50-E40-Iso.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: 42b1418d483dcb2b7846b8affa46a2fbb75787ba3472dc19f2ff20f0fde2ebbe
+snapshot: wl-Op-SFHo-15-25-50-E40-Iso.h5ls
+snapshot_sha256: 7c52ac36e50120aeeccf8c292b110d7b0311225054b72af6fecc96000f2d48c2
+
+table: wl-Op-SFHo-15-25-50-E40-NES.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: 14a99d4420cc68701ab27c1ffc652b3670d373f9b49ae1ed7ef3afab7f2274bb
+snapshot: wl-Op-SFHo-15-25-50-E40-NES.h5ls
+snapshot_sha256: 22253aff44ef749a1cc6e0e273405a8018dcd87714312eab88f31ca35658243e
+
+table: wl-Op-SFHo-15-25-50-E40-Pair.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: 850a697a92592f39a17bd6f3f35742cd3f75fc56a5391c763756a346b54ca579
+snapshot: wl-Op-SFHo-15-25-50-E40-Pair.h5ls
+snapshot_sha256: 4e47677e490f803504ffbe3300a5eb54f3be7c2d85dcf89814825dd0b30278f7
+
+table: wl-Op-SFHo-15-25-50-E40-Brem.h5
+weaklib_commit: 5836de983d2ea1305af31bf971099702759b1889
+table_sha256: b2a9f3df54e9852f92831e583f1cb747617422326e1dfa6fec7fe8364d6d80e3
+snapshot: wl-Op-SFHo-15-25-50-E40-Brem.h5ls
+snapshot_sha256: 143e9b1d985d6e665a8dd18ba5d44e2661c262e54e5af43c8c80045dd7e80906

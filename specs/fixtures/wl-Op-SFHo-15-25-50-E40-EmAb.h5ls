@@ -1,0 +1,54 @@
+/                        Group
+/EC_table                Group
+/EC_table/Rate           Dataset {20, 28, 93}
+/EC_table/Spectrum       Dataset {201, 20, 28, 93}
+/EC_table/T              Dataset {28}
+/EC_table/Units          Dataset {1}
+/EC_table/Ye             Dataset {20}
+/EC_table/maxRho         Dataset {1}
+/EC_table/maxT           Dataset {1}
+/EC_table/maxYe          Dataset {1}
+/EC_table/minRho         Dataset {1}
+/EC_table/minT           Dataset {1}
+/EC_table/minYe          Dataset {1}
+/EC_table/nPointsE       Dataset {1}
+/EC_table/nPointsRho     Dataset {1}
+/EC_table/nPointsT       Dataset {1}
+/EC_table/nPointsYe      Dataset {1}
+/EC_table/nu_E           Dataset {201}
+/EC_table/rate_Offsets   Dataset {1}
+/EC_table/rho            Dataset {93}
+/EC_table/spec_Offsets   Dataset {1}
+/EmAb                    Group
+/EmAb/Electron\ Antineutrino Dataset {30, 81, 185, 40}
+/EmAb/Electron\ Neutrino Dataset {30, 81, 185, 40}
+/EmAb/Offsets            Dataset {2}
+/EmAb/Units              Dataset {2}
+/EmAb/nOpacities         Dataset {1}
+/EmAb\ Parameters        Group
+/EmAb\ Parameters/np_FK  Dataset {1}
+/EmAb\ Parameters/np_FK_inv_n_decay Dataset {1}
+/EmAb\ Parameters/np_isoenergetic Dataset {1}
+/EmAb\ Parameters/np_non_isoenergetic Dataset {1}
+/EmAb\ Parameters/np_weak_magnetism Dataset {1}
+/EmAb\ Parameters/nuclei_EC_FFN Dataset {1}
+/EmAb\ Parameters/nuclei_EC_table Dataset {1}
+/EnergyGrid              Group
+/EnergyGrid/LogInterp    Dataset {1}
+/EnergyGrid/Name         Dataset {1}
+/EnergyGrid/Unit         Dataset {1}
+/EnergyGrid/Values       Dataset {40}
+/EnergyGrid/nPoints      Dataset {1}
+/ThermoState             Group
+/ThermoState/Density     Dataset {185}
+/ThermoState/Dimensions  Dataset {3}
+/ThermoState/Electron\ Fraction Dataset {30}
+/ThermoState/LogInterp   Dataset {3}
+/ThermoState/Names       Dataset {3}
+/ThermoState/Temperature Dataset {81}
+/ThermoState/Units       Dataset {3}
+/ThermoState/iRho        Dataset {1}
+/ThermoState/iT          Dataset {1}
+/ThermoState/iYe         Dataset {1}
+/ThermoState/maxValues   Dataset {3}
+/ThermoState/minValues   Dataset {3}

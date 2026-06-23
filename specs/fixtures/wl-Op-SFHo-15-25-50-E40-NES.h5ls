@@ -1,0 +1,33 @@
+/                        Group
+/EnergyGrid              Group
+/EnergyGrid/LogInterp    Dataset {1}
+/EnergyGrid/Name         Dataset {1}
+/EnergyGrid/Unit         Dataset {1}
+/EnergyGrid/Values       Dataset {40}
+/EnergyGrid/nPoints      Dataset {1}
+/EtaGrid                 Group
+/EtaGrid/LogInterp       Dataset {1}
+/EtaGrid/Name            Dataset {1}
+/EtaGrid/Unit            Dataset {1}
+/EtaGrid/Values          Dataset {120}
+/EtaGrid/nPoints         Dataset {1}
+/Scat_NES_Kernels        Group
+/Scat_NES_Kernels/Kernels Dataset {120, 81, 4, 40, 40}
+/Scat_NES_Kernels/NPS    Dataset {1}
+/Scat_NES_Kernels/Offsets Dataset {4, 1}
+/Scat_NES_Kernels/Units  Dataset {1}
+/Scat_NES_Kernels/nMoments Dataset {1}
+/Scat_NES_Kernels/nOpacities Dataset {1}
+/ThermoState             Group
+/ThermoState/Density     Dataset {185}
+/ThermoState/Dimensions  Dataset {3}
+/ThermoState/Electron\ Fraction Dataset {30}
+/ThermoState/LogInterp   Dataset {3}
+/ThermoState/Names       Dataset {3}
+/ThermoState/Temperature Dataset {81}
+/ThermoState/Units       Dataset {3}
+/ThermoState/iRho        Dataset {1}
+/ThermoState/iT          Dataset {1}
+/ThermoState/iYe         Dataset {1}
+/ThermoState/maxValues   Dataset {3}
+/ThermoState/minValues   Dataset {3}

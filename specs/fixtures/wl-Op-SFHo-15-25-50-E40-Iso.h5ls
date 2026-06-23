@@ -1,0 +1,39 @@
+/                        Group
+/EnergyGrid              Group
+/EnergyGrid/Edge         Dataset {41}
+/EnergyGrid/LogInterp    Dataset {1}
+/EnergyGrid/Name         Dataset {1}
+/EnergyGrid/Unit         Dataset {1}
+/EnergyGrid/Values       Dataset {40}
+/EnergyGrid/Width        Dataset {40}
+/EnergyGrid/Zoom         Dataset {1}
+/EnergyGrid/maxEdge      Dataset {1}
+/EnergyGrid/maxValue     Dataset {1}
+/EnergyGrid/minEdge      Dataset {1}
+/EnergyGrid/minValue     Dataset {1}
+/EnergyGrid/minWidth     Dataset {1}
+/EnergyGrid/nPoints      Dataset {1}
+/Scat_Iso_Kernels        Group
+/Scat_Iso_Kernels/Electron\ Antineutrino Dataset {30, 81, 185, 2, 40}
+/Scat_Iso_Kernels/Electron\ Neutrino Dataset {30, 81, 185, 2, 40}
+/Scat_Iso_Kernels/Offsets Dataset {2, 2}
+/Scat_Iso_Kernels/Units  Dataset {2}
+/Scat_Iso_Kernels/ga_strange Dataset {1}
+/Scat_Iso_Kernels/ion_ion_corr Dataset {1}
+/Scat_Iso_Kernels/many_body_corr Dataset {1}
+/Scat_Iso_Kernels/nMoments Dataset {1}
+/Scat_Iso_Kernels/nOpacities Dataset {1}
+/Scat_Iso_Kernels/weak_magnetism_corr Dataset {1}
+/ThermoState             Group
+/ThermoState/Density     Dataset {185}
+/ThermoState/Dimensions  Dataset {3}
+/ThermoState/Electron\ Fraction Dataset {30}
+/ThermoState/LogInterp   Dataset {3}
+/ThermoState/Names       Dataset {3}
+/ThermoState/Temperature Dataset {81}
+/ThermoState/Units       Dataset {3}
+/ThermoState/iRho        Dataset {1}
+/ThermoState/iT          Dataset {1}
+/ThermoState/iYe         Dataset {1}
+/ThermoState/maxValues   Dataset {3}
+/ThermoState/minValues   Dataset {3}

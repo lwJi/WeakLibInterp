@@ -1,0 +1,61 @@
+/                        Group
+/DependentVariables      Group
+/DependentVariables/Alpha\ Mass\ Fraction Dataset {30, 81, 185}
+/DependentVariables/Dimensions Dataset {3}
+/DependentVariables/Electron\ Chemical\ Potential Dataset {30, 81, 185}
+/DependentVariables/Entropy\ Per\ Baryon Dataset {30, 81, 185}
+/DependentVariables/Gamma1 Dataset {30, 81, 185}
+/DependentVariables/Heavy\ Binding\ Energy Dataset {30, 81, 185}
+/DependentVariables/Heavy\ Charge\ Number Dataset {30, 81, 185}
+/DependentVariables/Heavy\ Mass\ Fraction Dataset {30, 81, 185}
+/DependentVariables/Heavy\ Mass\ Number Dataset {30, 81, 185}
+/DependentVariables/Internal\ Energy\ Density Dataset {30, 81, 185}
+/DependentVariables/Names Dataset {15}
+/DependentVariables/Neutron\ Chemical\ Potential Dataset {30, 81, 185}
+/DependentVariables/Neutron\ Mass\ Fraction Dataset {30, 81, 185}
+/DependentVariables/Offsets Dataset {15}
+/DependentVariables/Pressure Dataset {30, 81, 185}
+/DependentVariables/Proton\ Chemical\ Potential Dataset {30, 81, 185}
+/DependentVariables/Proton\ Mass\ Fraction Dataset {30, 81, 185}
+/DependentVariables/Repaired Dataset {30, 81, 185}
+/DependentVariables/Thermal\ Energy Dataset {30, 81, 185}
+/DependentVariables/Units Dataset {15}
+/DependentVariables/iAlphaMassFraction Dataset {1}
+/DependentVariables/iElectronChemicalPotential Dataset {1}
+/DependentVariables/iEntropyPerBaryon Dataset {1}
+/DependentVariables/iGamma1 Dataset {1}
+/DependentVariables/iHeavyBindingEnergy Dataset {1}
+/DependentVariables/iHeavyChargeNumber Dataset {1}
+/DependentVariables/iHeavyMassFraction Dataset {1}
+/DependentVariables/iHeavyMassNumber Dataset {1}
+/DependentVariables/iInternalEnergyDensity Dataset {1}
+/DependentVariables/iNeutronChemicalPotential Dataset {1}
+/DependentVariables/iNeutronMassFraction Dataset {1}
+/DependentVariables/iPressure Dataset {1}
+/DependentVariables/iProtonChemicalPotential Dataset {1}
+/DependentVariables/iProtonMassFraction Dataset {1}
+/DependentVariables/iThermalEnergy Dataset {1}
+/DependentVariables/maxValues Dataset {15}
+/DependentVariables/minValues Dataset {15}
+/DependentVariables/nVariables Dataset {1}
+/Metadata                Group
+/Metadata/IDTag          Dataset {1}
+/Metadata/LeptonEOSLink  Dataset {1}
+/Metadata/NucEOSLink     Dataset {1}
+/Metadata/SourceLink     Dataset {1}
+/Metadata/TableLink      Dataset {1}
+/Metadata/TableResolution Dataset {1}
+/Metadata/WLRevision     Dataset {1}
+/ThermoState             Group
+/ThermoState/Density     Dataset {185}
+/ThermoState/Dimensions  Dataset {3}
+/ThermoState/Electron\ Fraction Dataset {30}
+/ThermoState/LogInterp   Dataset {3}
+/ThermoState/Names       Dataset {3}
+/ThermoState/Temperature Dataset {81}
+/ThermoState/Units       Dataset {3}
+/ThermoState/iRho        Dataset {1}
+/ThermoState/iT          Dataset {1}
+/ThermoState/iYe         Dataset {1}
+/ThermoState/maxValues   Dataset {3}
+/ThermoState/minValues   Dataset {3}
