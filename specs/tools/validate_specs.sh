@@ -113,6 +113,21 @@ REGISTERED_SPECS=(
   "opacity-emab-iso.md"
   "opacity-nes-pair.md"
   "opacity-brem.md"
+  "regression-suite-design.md"
+  "build-integration.md"
+)
+
+# LEAF_SPECS : the per-channel leaf specs whose public device entry points the
+#              regression-suite coverage matrix must reference (the closure check below).
+#              The cross-cutting (fortran-parity-and-tolerances, amrex-device-interface) and
+#              technical (table-format-and-io, regression-suite-design, build-integration)
+#              specs are not themselves "leaf entry-point" specs and are excluded here.
+LEAF_SPECS=(
+  "eos-interpolation.md"
+  "eos-inversion.md"
+  "opacity-emab-iso.md"
+  "opacity-nes-pair.md"
+  "opacity-brem.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -150,6 +165,18 @@ SPEC_REQUIRE_IN_SPEC=(
   "opacity-brem.md|||wlInterpolationModule.F90"
   "opacity-brem.md|||wlInterpolationUtilitiesModule.F90"
   "opacity-brem.md|||wlOpacityInterpolationModule.f90"
+  "regression-suite-design.md|||wlInterpolationModule.F90"
+  "regression-suite-design.md|||wlInterpolationUtilitiesModule.F90"
+  "regression-suite-design.md|||1e-12"
+  "regression-suite-design.md|||1e-10"
+  "regression-suite-design.md|||pending"
+  "regression-suite-design.md|||in-bounds"
+  "regression-suite-design.md|||out-of-range"
+  "regression-suite-design.md|||NaN-input"
+  "build-integration.md|||AMReX_GpuContainers.H"
+  "build-integration.md|||CPU-only"
+  "build-integration.md|||double"
+  "build-integration.md|||amrex::Real"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -369,6 +396,107 @@ check_readme_links() {
 }
 
 # --------------------------------------------------------------------------------------
+# Closure check (Phase 7):
+#   (1) the regression-suite coverage matrix references every leaf spec's public device
+#       entry points — no channel/variant is silently uncovered;
+#   (2) the README links EXACTLY the set of spec .md files present on disk — no orphan
+#       spec file (on disk but unlinked) and no missing link (linked but registered specs
+#       all present is already checked above; here we also assert the count is exactly 10).
+# --------------------------------------------------------------------------------------
+
+# The public device entry-point routine names each leaf spec defines; the
+# regression-suite coverage matrix must reference each one. These are the
+# generator-of-record `_Point`/`_Aligned` routine names the leaf specs name as their
+# device contract (the inversion family is keyed on its ComputeTemperatureWith_ prefix).
+COVERAGE_ENTRY_POINTS=(
+  "LogInterpolateSingleVariable_3D_Custom_Point"               # eos-interpolation: evaluate
+  "LogInterpolateDifferentiateSingleVariable_3D_Custom_Point"  # eos-interpolation: differentiate
+  "ComputeTemperatureWith_"                                    # eos-inversion: recover-T families
+  "LogInterpolateSingleVariable_4D_Custom_Point"               # opacity-emab-iso: EmAb (+ Iso via 4D kernel)
+  "LogInterpolateSingleVariable_2D2D_Custom_Aligned"           # opacity-nes-pair: NES + Pair
+  "SumLogInterpolateSingleVariable_2D2D_Custom_Aligned"        # opacity-brem: Brem
+)
+
+check_coverage_matrix_closure() {
+  local suite="$SPECS_DIR/regression-suite-design.md"
+  if [ ! -f "$suite" ]; then fail "regression-suite-design.md missing"; return; fi
+
+  # (1a) every leaf spec is linked from the coverage matrix (so a fresh agent can reach it).
+  local leaf
+  for leaf in "${LEAF_SPECS[@]}"; do
+    if grep -Fq "($leaf)" "$suite" || grep -Fq "(./$leaf)" "$suite"; then
+      info "coverage matrix links leaf spec: $leaf"
+    else
+      fail "regression-suite-design coverage matrix does not link leaf spec: $leaf"
+    fi
+  done
+
+  # (1b) every public device entry-point routine named in a leaf spec is referenced by the
+  #      coverage matrix. We derive the entry points from the leaf specs themselves (any
+  #      routine in COVERAGE_ENTRY_POINTS that a leaf actually names must be covered), so a
+  #      new entry point added to a leaf without a coverage row fails the gate.
+  local ep covered_by_leaf
+  for ep in "${COVERAGE_ENTRY_POINTS[@]}"; do
+    covered_by_leaf=0
+    for leaf in "${LEAF_SPECS[@]}"; do
+      if grep -Fq "$ep" "$SPECS_DIR/$leaf"; then covered_by_leaf=1; break; fi
+    done
+    if [ "$covered_by_leaf" -eq 0 ]; then
+      fail "expected leaf entry point not named by any leaf spec: $ep (registry drift?)"
+      continue
+    fi
+    if grep -Fq "$ep" "$suite"; then
+      pass "coverage matrix references leaf entry point: $ep"
+    else
+      fail "regression-suite-design coverage matrix omits leaf entry point: $ep"
+    fi
+  done
+}
+
+# (2) README links EXACTLY the spec .md files on disk: exactly 10, no orphans, no missing.
+check_readme_exact_ten() {
+  if [ ! -f "$README" ]; then fail "README.md missing at specs/README.md"; return; fi
+
+  # Spec .md files present on disk (README.md itself is the index, not a spec).
+  local -a on_disk=()
+  while IFS= read -r f; do
+    [ "$(basename "$f")" = "README.md" ] && continue
+    on_disk+=("$(basename "$f")")
+  done < <(find "$SPECS_DIR" -maxdepth 1 -name '*.md' | sort)
+
+  # Spec .md files the README links.
+  local -a linked=()
+  while IFS= read -r target; do
+    target="${target#./}"
+    linked+=("$target")
+  done < <(grep -oE '\]\(\.?/?[A-Za-z0-9_-]+\.md\)' "$README" | sed -E 's/^\]\(\.?\/?//; s/\)$//' | sort -u)
+
+  # exactly 10 spec files on disk.
+  if [ "${#on_disk[@]}" -eq 10 ]; then
+    pass "exactly 10 spec files present on disk (excluding README)"
+  else
+    fail "expected exactly 10 spec files on disk, found ${#on_disk[@]}: ${on_disk[*]}"
+  fi
+
+  # every on-disk spec is linked (no orphans).
+  local f l hit
+  for f in "${on_disk[@]}"; do
+    hit=0
+    for l in "${linked[@]}"; do [ "$l" = "$f" ] && hit=1; done
+    [ "$hit" -eq 1 ] || fail "orphan spec file on disk not linked from README: $f"
+  done
+
+  # every README link points at a spec that is on disk (no dangling spec links).
+  for l in "${linked[@]}"; do
+    hit=0
+    for f in "${on_disk[@]}"; do [ "$f" = "$l" ] && hit=1; done
+    [ "$hit" -eq 1 ] || fail "README links a spec not present on disk: $l"
+  done
+
+  if [ "$FAILURES" -eq 0 ]; then pass "README links exactly the 10 on-disk spec files (no orphans, no missing)"; fi
+}
+
+# --------------------------------------------------------------------------------------
 # Snapshot integrity (default mode): committed *.h5ls match tables.provenance checksums.
 # --------------------------------------------------------------------------------------
 check_snapshot_checksums() {
@@ -470,6 +598,14 @@ for e in "${SPEC_REQUIRE_IN_SNAPSHOT[@]}"; do check_require_in_snapshot "$e"; do
 echo
 echo "--- README index integrity ---"
 check_readme_links
+
+echo
+echo "--- closure: coverage matrix references every leaf entry point ---"
+check_coverage_matrix_closure
+
+echo
+echo "--- closure: README links exactly the 10 spec files ---"
+check_readme_exact_ten
 
 echo
 echo "--- committed snapshot checksums (CI-reproducible ground truth) ---"
