@@ -109,6 +109,7 @@ REGISTERED_SPECS=(
   "amrex-device-interface.md"
   "eos-interpolation.md"
   "eos-inversion.md"
+  "table-format-and-io.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -127,6 +128,11 @@ SPEC_REQUIRE_IN_SPEC=(
   "eos-inversion.md|||ComputeTemperatureWith_DXY_NoGuess"
   "eos-inversion.md|||1e-10"
   "eos-inversion.md|||wlEOSInversionModule.F90"
+  "table-format-and-io.md|||H5T_NATIVE_DOUBLE"
+  "table-format-and-io.md|||column-major"
+  "table-format-and-io.md|||EmAb_CorrectedAbsorption"
+  "table-format-and-io.md|||wlEOSIOModuleHDF.f90"
+  "table-format-and-io.md|||wlOpacityTableIOModuleHDF.f90"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -145,6 +151,13 @@ SPEC_REQUIRE_IN_SNAPSHOT=(
   "eos-interpolation.md|||wl-EOS-SFHo-15-25-50.h5ls|||/DependentVariables/Pressure"
   "eos-inversion.md|||wl-EOS-SFHo-15-25-50.h5ls|||/ThermoState/Temperature"
   "eos-inversion.md|||wl-EOS-SFHo-15-25-50.h5ls|||/DependentVariables/Pressure"
+  "table-format-and-io.md|||wl-EOS-SFHo-15-25-50.h5ls|||/ThermoState/Density"
+  "table-format-and-io.md|||wl-EOS-SFHo-15-25-50.h5ls|||/DependentVariables/Offsets"
+  "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-EmAb.h5ls|||/EmAb/Offsets"
+  "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-Iso.h5ls|||/Scat_Iso_Kernels/Offsets"
+  "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-NES.h5ls|||/Scat_NES_Kernels/Kernels"
+  "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Kernels"
+  "table-format-and-io.md|||wl-Op-SFHo-15-25-50-E40-Brem.h5ls|||/Scat_Brem_Kernels/S_sigma"
 )
 
 # --------------------------------------------------------------------------------------
