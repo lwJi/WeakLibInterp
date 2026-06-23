@@ -112,6 +112,7 @@ REGISTERED_SPECS=(
   "table-format-and-io.md"
   "opacity-emab-iso.md"
   "opacity-nes-pair.md"
+  "opacity-brem.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -144,6 +145,11 @@ SPEC_REQUIRE_IN_SPEC=(
   "opacity-nes-pair.md|||detailed balance"
   "opacity-nes-pair.md|||wlInterpolationModule.F90"
   "opacity-nes-pair.md|||wlOpacityInterpolationModule.f90"
+  "opacity-brem.md|||SumLogInterpolateSingleVariable_2D2D_Custom_Aligned"
+  "opacity-brem.md|||28/3"
+  "opacity-brem.md|||wlInterpolationModule.F90"
+  "opacity-brem.md|||wlInterpolationUtilitiesModule.F90"
+  "opacity-brem.md|||wlOpacityInterpolationModule.f90"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -181,6 +187,11 @@ SPEC_REQUIRE_IN_SNAPSHOT=(
   "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-NES.h5ls|||/Scat_NES_Kernels/Offsets Dataset {4, 1}"
   "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Kernels Dataset {120, 81, 4, 40, 40}"
   "opacity-nes-pair.md|||wl-Op-SFHo-15-25-50-E40-Pair.h5ls|||/Scat_Pair_Kernels/Offsets Dataset {4, 1}"
+  # opacity-brem: anchor the 5D kernel-table geometry and the 2D offset-dimensionality
+  # claims to the committed snapshot — the Brem table carries an {81, 185, 1, 40, 40}
+  # S_sigma dataset (Fortran (nE', nE, nMom, nρ, nT)) and a 2D {1, 1} Offsets dataset.
+  "opacity-brem.md|||wl-Op-SFHo-15-25-50-E40-Brem.h5ls|||/Scat_Brem_Kernels/S_sigma Dataset {81, 185, 1, 40, 40}"
+  "opacity-brem.md|||wl-Op-SFHo-15-25-50-E40-Brem.h5ls|||/Scat_Brem_Kernels/Offsets Dataset {1, 1}"
 )
 
 # --------------------------------------------------------------------------------------
