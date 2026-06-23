@@ -108,6 +108,7 @@ REGISTERED_SPECS=(
   "fortran-parity-and-tolerances.md"
   "amrex-device-interface.md"
   "eos-interpolation.md"
+  "eos-inversion.md"
 )
 
 # Per-spec extra assertions, expressed as "specfile|||needle".
@@ -121,11 +122,29 @@ SPEC_REQUIRE_IN_SPEC=(
   "eos-interpolation.md|||1e-10"
   "fortran-parity-and-tolerances.md|||1e-12"
   "fortran-parity-and-tolerances.md|||1e-30"
+  "eos-inversion.md|||InverseLogInterp"
+  "eos-inversion.md|||ComputeTemperatureWith_DXY_Guess"
+  "eos-inversion.md|||ComputeTemperatureWith_DXY_NoGuess"
+  "eos-inversion.md|||1e-10"
+  "eos-inversion.md|||wlEOSInversionModule.F90"
+)
+
+# Inversion error-code set: every code must be documented in the inversion spec.
+SPEC_REQUIRE_ERROR_CODES=(
+  "eos-inversion.md|||0"
+  "eos-inversion.md|||01"
+  "eos-inversion.md|||02"
+  "eos-inversion.md|||03"
+  "eos-inversion.md|||10"
+  "eos-inversion.md|||11"
+  "eos-inversion.md|||13"
 )
 
 SPEC_REQUIRE_IN_SNAPSHOT=(
   "eos-interpolation.md|||wl-EOS-SFHo-15-25-50.h5ls|||/ThermoState/Density"
   "eos-interpolation.md|||wl-EOS-SFHo-15-25-50.h5ls|||/DependentVariables/Pressure"
+  "eos-inversion.md|||wl-EOS-SFHo-15-25-50.h5ls|||/ThermoState/Temperature"
+  "eos-inversion.md|||wl-EOS-SFHo-15-25-50.h5ls|||/DependentVariables/Pressure"
 )
 
 # --------------------------------------------------------------------------------------
@@ -216,6 +235,19 @@ check_require_in_spec() {
     pass "$base: contains required claim: $needle"
   else
     fail "$base: missing required claim: $needle"
+  fi
+}
+
+# Inversion error-code assertion: the code must appear as a markdown table cell
+# `| <code> |` in the spec's error-code table (precise match, not a loose substring).
+check_require_error_code() {
+  local entry="$1" file code base
+  file="${entry%%|||*}"; code="${entry##*|||}"
+  base="$file"; file="$SPECS_DIR/$file"
+  if grep -Eq "^\|[[:space:]]*${code}[[:space:]]*\|" "$file"; then
+    pass "$base: documents error code: $code"
+  else
+    fail "$base: missing error code in error-code table: $code"
   fi
 }
 
@@ -379,6 +411,10 @@ done
 echo
 echo "--- per-spec: registered fixed-string claims ---"
 for e in "${SPEC_REQUIRE_IN_SPEC[@]}"; do check_require_in_spec "$e"; done
+
+echo
+echo "--- per-spec: inversion error-code coverage ---"
+for e in "${SPEC_REQUIRE_ERROR_CODES[@]}"; do check_require_error_code "$e"; done
 
 echo
 echo "--- per-spec: documented structure vs committed snapshots ---"

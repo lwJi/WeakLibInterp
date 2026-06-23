@@ -26,7 +26,7 @@ Open any single spec file in isolation: it is self-contained. The two cross-cutt
 | [fortran-parity-and-tolerances](./fortran-parity-and-tolerances.md) | Cross-cutting numeric contract: named oracle, tolerance tiers, log-space/offset + column-major conventions, bit-for-bit boundary/NaN policy, two-layer scheme. | committed |
 | [amrex-device-interface](./amrex-device-interface.md) | Cross-cutting device contract: qualifier macros, `Gpu::DeviceVector<double>` residency + `htod_memcpy` upload, raw `double const*` + extents column-major indexing, scalar `_Point` contract, `ParallelFor` launch. | committed |
 | [eos-interpolation](./eos-interpolation.md) | EOS single-variable 3D `(ρ,T,Yₑ)` trilinear-in-log evaluate + differentiate `_Point` contract. | committed |
-| eos-inversion | Recover T from `(ρ, X∈{E,P,S}, Yₑ)` via node bisection + log-linear inverse; integer error codes, `T=0`-on-failure, round-trip invariant. | planned (Phase 2) |
+| [eos-inversion](./eos-inversion.md) | Recover T from `(ρ, X∈{E,P,S}, Yₑ)` via node bisection + log-linear inverse; integer error codes, `T=0`-on-failure, round-trip invariant. | committed |
 | table-format-and-io | On-disk HDF5 reader contract: EOS/opacity group + dataset names, shapes, dtypes, per-channel offsets, column-major reversal, legacy fallbacks. | planned (Phase 3) |
 | opacity-emab-iso | EmAb 4D `(E,ρ,T,Yₑ)` and Iso 5D `(E,moment,ρ,T,Yₑ)` opacity channels sharing the EOS thermodynamic axes. | planned (Phase 4) |
 | opacity-nes-pair | NES + Pair 5D `(E',E,kernel,T,η)` channels; detailed-balance and crossing-symmetry invariants; `_2D2D_Custom_Aligned` consumer path. | planned (Phase 5) |
