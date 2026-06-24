@@ -51,7 +51,7 @@ where `offset` (the per-quantity additive `Offsets` value) is chosen at table-ge
 physical = 10**( multilinear_in_log_space(corner_values, deltas) ) - offset
 ```
 
-The concrete `offset` numbers live only in the production `.h5` files' `Offsets` datasets (research OQ#3); specs name the tables, fixtures carry the numbers.
+The concrete `offset` numbers live only in the production `.h5` files' `Offsets` datasets; specs name the tables, fixtures carry the numbers.
 
 ### Which axes are log, linear, or not interpolated
 
@@ -153,4 +153,4 @@ For every leaf, "correct" for a single query is, by definition, the value the ma
 
 ## Open questions / assumptions
 
-- **Concrete offsets and grid extents (assumption, non-blocking).** The per-quantity `Offsets` values and the energy/η grid extents live only in the production `.h5` files (research OQ#3). This spec pins the *contract* (`10**(stored) - offset`, which axes are log/linear); the live tables carry the numbers. Self-contained checks that need exact answers use synthetic tables whose offsets are chosen by the suite, so they do not depend on the unknown production offsets.
+- **Concrete offsets and grid extents (assumption, non-blocking).** The per-quantity `Offsets` values and the energy/η grid extents live only in the production `.h5` files. This spec pins the *contract* (`10**(stored) - offset`, which axes are log/linear); the live tables carry the numbers. Self-contained checks that need exact answers use synthetic tables whose offsets are chosen by the suite, so they do not depend on the unknown production offsets.

@@ -131,5 +131,5 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 
 ## Open questions / assumptions
 
-- **Concrete per-variable offsets (assumption, non-blocking).** The 15 `Offsets` values for this table live only in `/DependentVariables/Offsets` of the `.h5` file (research OQ#3). This spec pins the recovery contract; the table supplies the numbers. The self-contained exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
+- **Concrete per-variable offsets (assumption, non-blocking).** The 15 `Offsets` values for this table live only in `/DependentVariables/Offsets` of the `.h5` file. This spec pins the recovery contract; the table supplies the numbers. The self-contained exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
 - **Dependent-variable index assignment (assumption, non-blocking).** The mapping of variable slot → physical quantity (e.g. Pressure, Entropy, …) is authoritative via the `/DependentVariables/i*` datasets and the `Names` ordering in the file, not hard-coded here. This spec's contract is per-variable (one `OS` + one log-stored sub-table); which slot is which is read from the table per `table-format-and-io.md`.
