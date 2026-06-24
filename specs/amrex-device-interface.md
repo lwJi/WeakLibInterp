@@ -97,9 +97,9 @@ amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
 
 ## Verification
 
-- **Device/host equivalence (Layer 1).** Any `_Point` function compiled `AMREX_GPU_HOST_DEVICE` must produce identical results when called directly on the host and when called from inside a `ParallelFor` lambda over the same inputs (on a CPU build these are the same code path; the check guards against accidental host-only divergence and confirms the closure-capture-by-value contract).
-- **Indexing round-trip (Layer 1).** A test that writes known sentinel values into a flat `DeviceVector<double>` at chosen `(i0,...,i_{D-1})` using the column-major formula above and reads them back through a `_Point` call must recover the sentinels exactly, for 3D, 4D, and 5D shapes — proving the index arithmetic matches the documented formula.
-- **No-allocation / kernel-callability (Layer 1).** The `_Point` entry points must compile and run inside a `ParallelFor` lambda (the CPU build is sufficient to exercise this).
+- **Device/host equivalence.** Any `_Point` function compiled `AMREX_GPU_HOST_DEVICE` must produce identical results when called directly on the host and when called from inside a `ParallelFor` lambda over the same inputs (on a CPU build these are the same code path; the check guards against accidental host-only divergence and confirms the closure-capture-by-value contract).
+- **Indexing round-trip.** A test that writes known sentinel values into a flat `DeviceVector<double>` at chosen `(i0,...,i_{D-1})` using the column-major formula above and reads them back through a `_Point` call must recover the sentinels exactly, for 3D, 4D, and 5D shapes — proving the index arithmetic matches the documented formula.
+- **No-allocation / kernel-callability.** The `_Point` entry points must compile and run inside a `ParallelFor` lambda (the CPU build is sufficient to exercise this).
 - **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, and that its cited `amrex/...` source-of-truth paths resolve under `$AMREX_ROOT`.
 
 Tolerances for the equivalence/indexing checks are the machine-precision exactness tier (`~1e-14`, a few ULP) for value comparisons and exact equality for index round-trips, per `fortran-parity-and-tolerances.md`.

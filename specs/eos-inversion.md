@@ -12,7 +12,7 @@ In scope:
 - The integer error-code set `{0, 01, 02, 03, 10, 11, 13}`, its meaning, the `DescribeEOSInversionError` mapping, and the `_Error` vs `_NoError` reporting contract.
 - The `T = 0`-on-failure signaling convention.
 - The log-linear inverse-interpolation final step `InverseLogInterp`.
-- The round-trip Layer-1 invariant and its `1e-10` relaxed tolerance, with rationale.
+- The round-trip invariant and its `1e-10` relaxed tolerance, with rationale.
 - Boundary / NaN handling specific to inversion (input-bounds validation, NaN detection).
 
 Out of scope:
@@ -35,7 +35,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
   - The public wrapper matrix `ComputeTemperatureWith_{DEY,DPY,DSY}_{Single,Many}_{Guess,NoGuess}_{Error,NoError}` (subroutines spanning `wlEOSInversionModule.F90:576-1005`) — thin dispatch over the two `_DXY_` kernels, selecting the `E`/`P`/`S` sub-table; the `_NoError` variants discard the returned code.
 - `weaklib/Distributions/Library/wlInterpolationModule.F90` — `LogInterpolateSingleVariable_2D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1115-1165`), the bilinear-in-log evaluation of the dependent variable at a fixed temperature node over the `(ρ, Yₑ)` face that the bisection calls at each candidate `T`.
 
-These `_Point`/`_Single` routines are the generator-of-record for Layer-2 parity (see `fortran-parity-and-tolerances.md`).
+These `_Point`/`_Single` routines are the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`).
 
 ## Inputs & outputs
 
@@ -64,7 +64,7 @@ Value type is `double` throughout (weaklib `dp = 8`); see `fortran-parity-and-to
 - `T` — the recovered temperature in Kelvin. On any non-zero `Error`, `T = 0`.
 - `Error` — the integer error code (returned by the `_Error` variants; discarded by the `_NoError` variants).
 
-### Reference table (anchors fixtures and Layer-1 checks)
+### Reference table (anchors the regression-suite checks)
 
 `wl-EOS-SFHo-15-25-50.h5`, pinned by path + `sha256` in `specs/fixtures/tables.provenance`; its structure is committed at `specs/fixtures/wl-EOS-SFHo-15-25-50.h5ls`. The thermodynamic axes are under group `/ThermoState` (`/ThermoState/Density` `[185]`, `/ThermoState/Temperature` `[81]`, `/ThermoState/Electron Fraction` `[30]`), and the invertible dependent variables under group `/DependentVariables` — `/DependentVariables/Internal Energy Density`, `/DependentVariables/Pressure`, `/DependentVariables/Entropy Per Baryon` (each shape `{30, 81, 185}` in `h5ls` C-order = Fortran `(185, 81, 30) = (nρ, nT, nYe)`) — with per-variable additive offsets in `/DependentVariables/Offsets` `[15]`. Real grid extents in this table: ρ ∈ [1.66054e3, 3.16409e15] g/cm³, T ∈ [1.16045e9, 1.83919e12] K, Yₑ ∈ [0.01, 0.6]. Full on-disk contract: `table-format-and-io.md`.
 
@@ -110,7 +110,7 @@ Codes `04–09` and `12` are undefined and never produced; a code `> 13` is a pr
 - The `_Error` variants return the integer `Error` to the caller (the caller may map it to a string via the `DescribeEOSInversionError` mapping above). The recovered `T` is valid iff `Error == 0`.
 - The `_NoError` variants discard the code. Because failure also sets `T = 0`, **`T = 0` is the only failure signal available to a `_NoError` caller** — a returned `T == 0` means "inversion failed" and any non-zero `T` is a success. A C++ port must preserve this: `_NoError` callers cannot distinguish *why* it failed, only *that* it did, via `T = 0`.
 
-### Round-trip invariant (the Layer-1 closure check)
+### Round-trip invariant (the closure check)
 
 The inversion is the inverse of the forward dependent-variable interpolation, so for an in-bounds query the composition must close:
 
@@ -141,7 +141,7 @@ The check that "counts as failure" is the relative residual exceeding `1e-10`, o
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against both synthetic in-suite tables and the real reference table `wl-EOS-SFHo-15-25-50.h5`:
 
@@ -150,10 +150,6 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 3. **Error codes (exact-equality).** Construct queries that trigger each code and assert the returned `Error` equals it: out-of-bounds ρ → `01`; out-of-bounds X → `02`; out-of-bounds Yₑ → `03`; an uninitialized-bounds state → `10`; a NaN input → `11`; a value with no sign-change bracket (e.g. `X` strictly outside the table's `[X_min, X_max]` along `T` at fixed ρ, Yₑ, or a monotone sub-table queried beyond its range) → `13`. In every non-zero-code case assert `T == 0`.
 4. **`T = 0`-on-failure signaling (exact-equality).** Confirm that the `_NoError`-style path returns `T == 0` for every failing query and a non-zero `T` for every succeeding one — the sole failure signal when the code is discarded.
 5. **No-root / non-monotone handling.** For a sub-table that is non-monotone in `T` at fixed `(ρ, Yₑ)`, confirm the `NoGuess` variant selects the highest-temperature root among the sign-change brackets, and the `Guess` variant selects the root nearest the guess index; a target with no bracket returns `Error = 13`, `T = 0`.
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-Compare recovered `T` (relaxed tier `1e-10`) and the returned `Error` codes (exact-equality) against committed golden fixtures generated offline by the `ComputeTemperatureWith_{DEY,DPY,DSY}_Single_{Guess,NoGuess}_Error` routines at the pinned commit, over a query set drawn from `wl-EOS-SFHo-15-25-50.h5` (in-bounds, on-edge, out-of-range, and NaN inputs to exercise every code). Until fixtures exist these tests report **pending**, not passing (see `fortran-parity-and-tolerances.md`).
 
 ### Mechanical (validator)
 
@@ -169,7 +165,6 @@ Compare recovered `T` (relaxed tier `1e-10`) and the returned `Error` codes (exa
 
 ## Open questions / assumptions
 
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden inversion outputs exist or can be generated in this environment; Layer-2 tests ship **pending**, the named `ComputeTemperatureWith_*_Error` routines remain the generator-of-record, and the Ralph loop gates on Layer 1. See `fortran-parity-and-tolerances.md`.
-- **Concrete per-variable offsets and value bounds (assumption, non-blocking).** The `OS` offsets and the `MinX/MaxX` value extents for E/P/S live only in the `.h5` file (`/DependentVariables/Offsets`, and the `MIN/MAXVAL` of each sub-table; research OQ#3). This spec pins the algorithm and the bounds-check contract; the fixture/table supplies the numbers. Layer-1 round-trip checks use the offsets/bounds read from the chosen (synthetic or real) table, so they do not depend on hard-coded production values.
+- **Concrete per-variable offsets and value bounds (assumption, non-blocking).** The `OS` offsets and the `MinX/MaxX` value extents for E/P/S live only in the `.h5` file (`/DependentVariables/Offsets`, and the `MIN/MAXVAL` of each sub-table; research OQ#3). This spec pins the algorithm and the bounds-check contract; the fixture/table supplies the numbers. The round-trip checks use the offsets/bounds read from the chosen (synthetic or real) table, so they do not depend on hard-coded production values.
 - **Initialization-state representation (assumption, non-blocking).** weaklib carries a module-level `InversionInitialized` flag (and module-global bounds scalars) that `CheckInputError` consults for code `10`. The C++ port is free to represent this however it likes (e.g. an explicit bounds struct passed to the device function); the only fixed contract is that querying with uninitialized/absent bounds yields code `10`.
 - **Highest-temperature-root tie-breaking (assumption, non-blocking).** The `NoGuess` fall-through selects the highest-temperature root and the `Guess` fall-through the nearest-to-guess root, mirroring weaklib; for well-posed monotone sub-tables there is a single root and the tie-break is irrelevant. The non-monotone tie-break behavior is pinned to the weaklib routines named in "Source of truth".

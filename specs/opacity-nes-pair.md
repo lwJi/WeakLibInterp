@@ -21,7 +21,7 @@ In scope:
 - The single-point **aligned** evaluate contract: at fixed energy indices `(iE', iE)` and `kernel` index, interpolate one kernel value bilinearly in `(log10 T, log10 η)`.
 - Independent-variable order/units; which coordinates arrive **pre-`LOG10`** (`T`, `η`) and which axes are not interpolated (`E'`, `E`, `kernel`).
 - The kernel-index constants for NES (`iHi0`, `iHii0`, `iHi1`, `iHii1`) and Pair (`iJi0`, `iJii0`, `iJi1`, `iJii1`).
-- The detailed-balance (NES) and crossing-symmetry (Pair) invariants as Layer-1 closure checks: which triangle is computed vs. filled, the exact fill formula, and the tolerance.
+- The detailed-balance (NES) and crossing-symmetry (Pair) invariants as closure checks of the regression suite: which triangle is computed vs. filled, the exact fill formula, and the tolerance.
 - The 2D offset dimensionality `Offsets[nOpacities, nMoments]`.
 - Column-major indexing of the 5D `(E', E, kernel, T, η)` table and its 4D `(E', E, T, η)` sub-table at a fixed `kernel`.
 - Boundary/out-of-range/NaN behavior (bit-for-bit with weaklib).
@@ -52,7 +52,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
   - NES detailed-balance fill of the upper energy triangle: `PhiNES(iEp, iE, l, iS, iX) = PhiNES(iE, iEp, l, iS, iX) · EXP((E(iE) − E(iEp)) / T(iX))` for `iEp > iE` (`wlOpacityInterpolationModule.f90:104-115`).
   - Pair crossing-symmetry fill of the upper triangle, swapping `(iE, iEp)` and `Ji ↔ Jii` (Bruenn 1985, Eq. C64) (`wlOpacityInterpolationModule.f90:196-228`).
 
-The aligned `_Point` routine is the generator-of-record for Layer-2 parity (see `fortran-parity-and-tolerances.md`); the symmetry invariants are the Layer-1 closure checks that gate the loop today.
+The aligned `_Point` routine is the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`); the symmetry invariants are the closure checks of the regression suite.
 
 ## Inputs & outputs
 
@@ -106,7 +106,7 @@ These integers index the `kernel` axis directly; they are never interpolated and
 - The recovered physical kernel value `10**(BiLinear(...)) - OS` at the requested `(iE', iE, kernel, T, η)`, in that channel's stored units (`/Scat_{NES,Pair}_Kernels/Units`).
 - For the channel as a whole, the kernel array over the energy plane: the **lower triangle `iE' ≤ iE`** is interpolated directly; the **upper triangle `iE' > iE`** is filled by the channel's symmetry (detailed balance for NES, crossing for Pair) — see Correctness requirements.
 
-### Reference tables (anchor fixtures and Layer-1 checks)
+### Reference tables (anchor the regression-suite checks)
 
 - **NES:** `wl-Op-SFHo-15-25-50-E40-NES.h5`, pinned by path + `sha256` in `specs/fixtures/tables.provenance`; structure committed at `specs/fixtures/wl-Op-SFHo-15-25-50-E40-NES.h5ls`. The kernels live under `/Scat_NES_Kernels/Kernels` (`h5ls` `{120, 81, 4, 40, 40}` = Fortran `(40, 40, 4, 81, 120) = (nE', nE, nMom, nT, nEta)`), the **2D** offsets under `/Scat_NES_Kernels/Offsets` `{4, 1}` = Fortran `(1, 4) = (nOpacities, nMoments)`, the energy axis under `/EnergyGrid/Values` `[40]`, the η axis under `/EtaGrid/Values` `[120]`, and temperature under `/ThermoState/Temperature` `[81]`.
 - **Pair:** `wl-Op-SFHo-15-25-50-E40-Pair.h5`, pinned the same way; structure at `specs/fixtures/wl-Op-SFHo-15-25-50-E40-Pair.h5ls`. The kernels live under `/Scat_Pair_Kernels/Kernels` (same `{120, 81, 4, 40, 40}` shape), the **2D** offsets under `/Scat_Pair_Kernels/Offsets` `{4, 1}`, with the same `/EnergyGrid`, `/EtaGrid`, and `/ThermoState/Temperature` axes as the NES file.
@@ -145,7 +145,7 @@ Because both `T` and `η` are interpolated **linearly in their `LOG10`'d coordin
 
 The aligned routine computes only the **lower energy triangle** `iE' ≤ iE` directly. The **upper triangle** `iE' > iE` is **not** independently interpolated; it is filled from the lower triangle by the channel's physics symmetry below. A correct implementation must (a) interpolate the lower triangle, and (b) fill the upper triangle by the stated symmetry — not by interpolating the upper-triangle table entries (which may be unpopulated / undefined).
 
-### NES detailed-balance invariant (Layer-1 closure check)
+### NES detailed-balance invariant (closure check)
 
 For the assembled NES kernel `Phi` at a fixed thermodynamic point with temperature `T` (in MeV) and neutrino energies `E(iE)`, `E(iEp)`:
 
@@ -155,7 +155,7 @@ Phi(iEp, iE) = Phi(iE, iEp) · exp( ( E(iE) − E(iEp) ) / T )      for iEp > iE
 
 i.e. the upper energy triangle is the lower triangle scaled by the Boltzmann factor `exp((E − E')/T)`. This is the exact relation the consumer applies (`wlOpacityInterpolationModule.f90:104-115`). A correct NES implementation must reproduce it: the upper-triangle value equals the symmetric lower-triangle value times `exp((E(iE) − E(iEp)) / T)`. Verified to the **default parity tier** (`rtol 1e-12`, `atol 1e-30`) where the lower-triangle value is exact, since the only added operations are one `exp` and one divide.
 
-### Pair crossing-symmetry invariant (Bruenn 1985, Eq. C64) (Layer-1 closure check)
+### Pair crossing-symmetry invariant (Bruenn 1985, Eq. C64) (closure check)
 
 For the assembled Pair kernel, the upper energy triangle is filled by a **crossing symmetry** that swaps **both** the energy indices `(iE, iEp)` **and** the in-pair / cross-pair kernel components (`Ji ↔ Jii`). Concretely, for a species with per-species coupling weights `C_i`, `C_ii`, the upper-triangle (`iEp > iE`) entries are assembled from the *transposed* energy entry with the kernel components exchanged:
 
@@ -193,7 +193,7 @@ Replicate the permissive behavior exactly (see `fortran-parity-and-tolerances.md
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against both synthetic in-suite tables and the real reference tables `wl-Op-SFHo-15-25-50-E40-NES.h5` / `…-Pair.h5`:
 
@@ -204,10 +204,6 @@ Run against both synthetic in-suite tables and the real reference tables `wl-Op-
 5. **Pair crossing symmetry (default parity tier).** Build a synthetic Pair kernel and assert the implementation's upper-triangle output (`iEp > iE`) equals the transposed-energy entry with the `i`/`ii` kernel components exchanged: `Phi0(iEp, iE) = C_i·Kernel(iE, iEp, iJii0) + C_ii·Kernel(iE, iEp, iJi0)` (and the order-1 analogue), distinct from the un-swapped lower-triangle assembly. This is an exact relabeling — no tolerance beyond default parity is needed.
 6. **Boundary extrapolation (no tolerance / exact relation).** A query just outside an edge of `T` or `η` must equal the edge cell's linear extrapolation (the same bilinear formula evaluated with the unclamped delta) — confirming clamp-index-but-not-delta.
 7. **NaN propagation (NaN-equality).** A query with non-positive `T` or `η` must produce a NaN `Interpolant`.
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-Compare `Interpolant` (default tier `1e-12`/`1e-30`) against committed golden fixtures generated offline by `LogInterpolateSingleVariable_2D2D_Custom_Aligned_Point` at the pinned commit — over `(iE', iE, kernel, T, η)` query points drawn from `wl-Op-SFHo-15-25-50-E40-NES.h5` and `wl-Op-SFHo-15-25-50-E40-Pair.h5`. Until fixtures exist these tests report **pending**, not passing (see `fortran-parity-and-tolerances.md`).
 
 ### Mechanical (validator)
 
@@ -227,7 +223,6 @@ Compare `Interpolant` (default tier `1e-12`/`1e-30`) against committed golden fi
 ## Open questions / assumptions
 
 - **`LogInterpolateOpacity_2D1D2D` provenance gap (research OQ#1 — assumption, explicitly non-blocking).** weaklib's standalone NES/Pair wrappers `wlInterpolateOpacity_NES` / `_Pair` (`wlOpacityInterpolationModule.f90:51-52, 149-150`) interpolate the full `(E', E)` energy grid via a routine `LogInterpolateOpacity_2D1D2D` that is **imported but not present** in the read `wlInterpolationModule.F90` source (a different revision, a generated file, or a build-time include). Its exact signature and per-axis log/linear convention are therefore unresolved. **This is off the reference consumer's critical path:** `wlOpacityInterpolationModule.f90` is never `USE`d by thornado, whose production NES/Pair path drives the **aligned** routine `LogInterpolateSingleVariable_2D2D_Custom_Aligned(_Point)` on pre-aligned `NES_AT` / `Pair_AT` tables (research §7). This spec therefore pins the **aligned** path as the source-of-truth interpolation contract, and the unresolved `2D1D2D` routine is recorded here purely as a provenance note for weaklib's standalone full-energy-grid path, which the C++ port does not need to reproduce. The Ralph loop is never blocked on this routine name: NES/Pair correctness is anchored to the aligned bilinear interpolation plus the detailed-balance / crossing-symmetry invariants, all of which are fully specified above.
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden NES/Pair interpolation outputs exist or can be generated in this environment; Layer-2 tests ship **pending**, the named aligned `_Point` routine remains the generator-of-record, and the Ralph loop gates on Layer 1. See `fortran-parity-and-tolerances.md`.
-- **Concrete offsets, energy/η/T grid extents, and coupling constants (assumption, non-blocking).** The 2D `Offsets[nOpacities, nMoments]` values, the energy / η / temperature node coordinates, and the weak-coupling constants `cv`, `ca` (and thus `C_i = (cv ± ca)²`, `C_ii = (cv ∓ ca)²`) live only in the production `.h5` files and the consumer's physics assembly (research OQ#3). This spec pins the recovery contract, offset dimensionality, and the symmetry invariants; the fixture/table supplies the numbers. Layer-1 exactness and symmetry checks use synthetic tables whose offsets and coupling weights the suite chooses, so they do not depend on the unknown production values.
+- **Concrete offsets, energy/η/T grid extents, and coupling constants (assumption, non-blocking).** The 2D `Offsets[nOpacities, nMoments]` values, the energy / η / temperature node coordinates, and the weak-coupling constants `cv`, `ca` (and thus `C_i = (cv ± ca)²`, `C_ii = (cv ∓ ca)²`) live only in the production `.h5` files and the consumer's physics assembly (research OQ#3). This spec pins the recovery contract, offset dimensionality, and the symmetry invariants; the fixture/table supplies the numbers. The exactness and symmetry checks use synthetic tables whose offsets and coupling weights the suite chooses, so they do not depend on the unknown production values.
 - **Temperature units (assumption).** This spec assumes `T` is in MeV for the NES/Pair channels (per `wlOpacityInterpolationModule.f90:30` and the η/Boltzmann-factor physics), in contrast to the Kelvin convention of the EOS / EmAb / Iso channels. The on-disk `/ThermoState/Units` dataset is authoritative; the consumer must pass `T` in the same units the `/ThermoState/Temperature` grid was tabulated in, and `η`, `(E − E')/T` must be consistent (energies and `T` in the same energy unit so the Boltzmann factor is dimensionless).
 - **`nOpacities` / `nMoments` are read from the table (assumption, non-blocking).** In the pinned NES/Pair tables `nMoments = 4` (the four kernel components `iHi0..iHii1` / `iJi0..iJii1`) and `nOpacities = 1` (the `Offsets {4,1}` = Fortran `(1, 4)` snapshot). The interpolation contract is per-`(opacity, kernel)` (one `OS` + one log-stored 4D `(E', E, T, η)` sub-table), with the counts read per `table-format-and-io.md`.

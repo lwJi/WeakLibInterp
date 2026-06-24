@@ -85,7 +85,7 @@ Each entry point is exercised across these four input regimes, drawn from both s
 
 ### Tolerance tiers (referenced, not redefined)
 
-The four tiers — default parity `rtol 1e-12` / `atol 1e-30`, relaxed `1e-10`, machine-precision exactness `~1e-14`, and exact / NaN-equality — and the rule for which applies where are defined in `fortran-parity-and-tolerances.md`. Each coverage cell asserts at the tier its row's leaf spec and the regime column dictate (interpolated value: default; derivative / inversion-T / round-trip: relaxed; closed-form Layer-1 exactness: machine-precision; boundary/NaN/error-code: exact/NaN-equality).
+The four tiers — default parity `rtol 1e-12` / `atol 1e-30`, relaxed `1e-10`, machine-precision exactness `~1e-14`, and exact / NaN-equality — and the rule for which applies where are defined in `fortran-parity-and-tolerances.md`. Each coverage cell asserts at the tier its row's leaf spec and the regime column dictate (interpolated value: default; derivative / inversion-T / round-trip: relaxed; closed-form exactness: machine-precision; boundary/NaN/error-code: exact/NaN-equality).
 
 ### C++/AMReX-only at test time
 

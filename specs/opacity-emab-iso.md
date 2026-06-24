@@ -17,7 +17,7 @@ In scope:
 - The per-channel offset dimensionality (EmAb 1D `Offsets[nOpacities]`; Iso 2D `Offsets[nOpacities, nMoments]`) and species/moment index constants.
 - Column-major table indexing for the 4D EmAb table and the 5D Iso table (and how the Iso 5D table is sliced to a 4D sub-table at a fixed `(species, moment)`).
 - Boundary/out-of-range/NaN behavior (bit-for-bit with weaklib).
-- Layer-1 closed-form checks.
+- The self-contained closed-form checks.
 
 Out of scope:
 - The two-energy channels NES/Pair (`(E', E, kernel, T, η)`) — see `opacity-nes-pair.md`.
@@ -38,7 +38,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
 
 **The 5D Iso table is interpolated via the 4D `_Point` routine on a fixed-`(species, moment)` slice.** The reference consumer path (`thornado/Modules/Opacities/NeutrinoOpacitiesComputationModule.F90:1505-1508`) slices the 5D Iso table at the requested integer `moment` and species, `Iso_T(:,:,:,:, iMoment, iC)`, then calls `LogInterpolateSingleVariable_4D_Custom_Point` on that 4D `(E, ρ, T, Yₑ)` sub-table with the 2D offset `OS_Iso(iC, iMoment)`. So both channels share one interpolation kernel; the only Iso-specific step is selecting the `(species, moment)` slice and the 2D offset before the 4D call.
 
-These `_Point` routines (and the slice-then-4D path) are the generator-of-record for Layer-2 parity (see `fortran-parity-and-tolerances.md`).
+These `_Point` routines (and the slice-then-4D path) are the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`).
 
 ## Inputs & outputs
 
@@ -85,7 +85,7 @@ The critical distinction a fresh agent must observe: **`E`, `ρ`, `T` are locate
 
 - A single recovered physical value: the EmAb opacity for the chosen species, or the Iso scattering-kernel moment for the chosen `(species, moment)`, in that channel's stored units (per-species `/…/Units`).
 
-### Reference tables (anchor fixtures and Layer-1 checks)
+### Reference tables (anchor the regression-suite checks)
 
 - **EmAb:** `wl-Op-SFHo-15-25-50-E40-EmAb.h5`, pinned by path + `sha256` in `specs/fixtures/tables.provenance`; structure committed at `specs/fixtures/wl-Op-SFHo-15-25-50-E40-EmAb.h5ls`. The opacity arrays live under `/EmAb` (`/EmAb/Electron Neutrino`, `/EmAb/Electron Antineutrino`, each `h5ls` `{30, 81, 185, 40}` = Fortran `(40, 185, 81, 30) = (nE, nρ, nT, nYe)`), the energy axis under `/EnergyGrid/Values` `[40]`, the thermodynamic axes under `/ThermoState` (`/ThermoState/Density` `[185]`, `/ThermoState/Temperature` `[81]`, `/ThermoState/Electron Fraction` `[30]`), and the **1D** offsets under `/EmAb/Offsets` `[2]`.
 - **Iso:** `wl-Op-SFHo-15-25-50-E40-Iso.h5`, pinned the same way; structure at `specs/fixtures/wl-Op-SFHo-15-25-50-E40-Iso.h5ls`. The kernels live under `/Scat_Iso_Kernels` (`/Scat_Iso_Kernels/Electron Neutrino`, `…/Electron Antineutrino`, each `h5ls` `{30, 81, 185, 2, 40}` = Fortran `(40, 2, 185, 81, 30) = (nE, nMom, nρ, nT, nYe)`), and the **2D** offsets under `/Scat_Iso_Kernels/Offsets` `{2, 2}` = `(nOpacities, nMoments)`. The energy and thermodynamic axes are the same `/EnergyGrid` and `/ThermoState` groups as the EmAb file.
@@ -135,7 +135,7 @@ Replicate the permissive behavior exactly (see `fortran-parity-and-tolerances.md
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against both synthetic in-suite tables and the real reference tables `wl-Op-SFHo-15-25-50-E40-EmAb.h5` / `…-Iso.h5`:
 
@@ -144,10 +144,6 @@ Run against both synthetic in-suite tables and the real reference tables `wl-Op-
 3. **Moment-slice independence (Iso, machine-precision tier).** On a synthetic Iso table with a different known affine function per `moment`, interpolating at each `iMom` must recover that moment's function and be unaffected by the others — confirming the moment index is a pure slice with the matching 2D offset element.
 4. **Boundary extrapolation (no tolerance / exact relation).** A query just outside an edge of E, ρ, T, or Yₑ must equal the edge cell's linear extrapolation (the same tetralinear formula evaluated with the unclamped delta) — confirming clamp-index-but-not-delta.
 5. **NaN propagation (NaN-equality).** A query with non-positive E, ρ, or T must produce a NaN `Interpolant`.
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-Compare `Interpolant` (default tier `1e-12`/`1e-30`) against committed golden fixtures generated offline by `LogInterpolateSingleVariable_4D_Custom_Point` at the pinned commit — for EmAb over query points drawn from `wl-Op-SFHo-15-25-50-E40-EmAb.h5`, and for Iso by slicing `wl-Op-SFHo-15-25-50-E40-Iso.h5` at each `(species, moment)` and applying the same 4D routine. Until fixtures exist these tests report **pending**, not passing (see `fortran-parity-and-tolerances.md`).
 
 ### Mechanical (validator)
 
@@ -165,6 +161,5 @@ Compare `Interpolant` (default tier `1e-12`/`1e-30`) against committed golden fi
 
 ## Open questions / assumptions
 
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden opacity interpolation outputs exist or can be generated in this environment; Layer-2 tests ship **pending**, the named `_Point` routine remains the generator-of-record, and the Ralph loop gates on Layer 1. See `fortran-parity-and-tolerances.md`.
-- **Concrete per-channel offsets and energy-grid extents (assumption, non-blocking).** The `Offsets` values (1D for EmAb, 2D for Iso) and the energy/η node coordinates live only in the production `.h5` files (research OQ#3). This spec pins the recovery contract and offset dimensionality; the fixture/table supplies the numbers. Layer-1 exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
+- **Concrete per-channel offsets and energy-grid extents (assumption, non-blocking).** The `Offsets` values (1D for EmAb, 2D for Iso) and the energy/η node coordinates live only in the production `.h5` files (research OQ#3). This spec pins the recovery contract and offset dimensionality; the fixture/table supplies the numbers. The exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
 - **Species/moment counts are read from the table (assumption, non-blocking).** `nOpacities` (2 here) and `nMoments` (2 here for Iso) are authoritative via the `/…/nOpacities`, `/Scat_Iso_Kernels/nMoments` datasets and the `Names` ordering; this spec's contract is per-`(species[, moment])` (one `OS` + one log-stored sub-table), with the counts read per `table-format-and-io.md`. The `iNu_x`/`iNu_x_bar` heavy-lepton species exist as constants but are not carried as named datasets in the pinned 2-species production tables.

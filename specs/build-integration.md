@@ -40,7 +40,7 @@ This spec defines no callable surface. Its "inputs" are the dependencies that mu
 | C++ HDF5 library | reading the production `.h5` tables (group/dataset names, shapes, dtypes — see `table-format-and-io.md`) | C++ API; reading needs no Fortran |
 | C++ toolchain | compiling the library + suite (C++ standard AMReX requires) | host compiler only |
 
-There is **no Fortran compiler and no Matlab** in the build or at runtime. The weaklib Fortran and the Matlab oracles are read-only sources of truth: the library reimplements weaklib's behavior in C++, and Layer-2 parity fixtures (if/when supplied) are generated **offline** elsewhere and committed as data — never built or run here. See `regression-suite-design.md`.
+There is **no Fortran compiler and no Matlab** in the build or at runtime. The weaklib Fortran and the Matlab oracles are read-only sources of truth: the library reimplements weaklib's behavior in C++. See `regression-suite-design.md`.
 
 ### Link targets
 
@@ -51,7 +51,7 @@ There is **no Fortran compiler and no Matlab** in the build or at runtime. The w
 
 - **AMReX is a required dependency, built CPU-only / double precision.** Both the library and the suite link AMReX in its CPU-only (no GPU backend), double-precision configuration. Under it the device interface (`amrex-device-interface.md`) runs on host: the qualifier macros expand to nothing, `ParallelFor` is a sequential loop, and `Gpu::DeviceVector` allocates host memory. No GPU is required to build or run the suite.
 - **Value type pinned to `double`, independent of `amrex::Real`.** The correctness-bearing tables are `Gpu::DeviceVector<double>` and the entry points take `double const*`; the value type is fixed to `double` (= weaklib `dp = 8`) **regardless of how `amrex::Real` is configured**. A single-precision AMReX build (`amrex::Real = float`) must not be able to silently degrade bit-level parity — the interpolator's tables and entry points still use `double`. The on-disk reader contract remains `H5T_NATIVE_DOUBLE` (see `table-format-and-io.md`). This is a requirement the build must enforce, not a property AMReX provides.
-- **No Fortran/Matlab build or runtime dependency.** The build pipeline invokes no Fortran compiler and no Matlab; nothing in the library or the suite calls a Fortran/Matlab routine at build time or test time. Layer-2 parity fixtures, when they exist, are committed data produced offline (see `fortran-parity-and-tolerances.md` / `regression-suite-design.md`).
+- **No Fortran/Matlab build or runtime dependency.** The build pipeline invokes no Fortran compiler and no Matlab; nothing in the library or the suite calls a Fortran/Matlab routine at build time or test time (see `fortran-parity-and-tolerances.md` / `regression-suite-design.md`).
 - **The sibling `amrex` repo is the available AMReX source.** The build resolves AMReX from the sibling `amrex` checkout (or an equivalent AMReX install/source the build is pointed at); the headers under `amrex/Src/Base/` named above must be present and compilable in the CPU/double configuration.
 
 ## Verification
@@ -60,7 +60,7 @@ A fresh agent confirms the build/integration contract is met by these self-conta
 
 1. **CPU-only build succeeds with no GPU.** The library and the regression suite both build and link against AMReX in its CPU-only, double-precision configuration on a host with no GPU toolchain, and the suite runs to completion on host. (This is the same property `amrex-device-interface.md`'s "host/CPU parity needs no GPU" relies on.)
 2. **No Fortran/Matlab in the toolchain.** The build completes with only a C++ toolchain + AMReX + C++ HDF5 present; no Fortran compiler or Matlab is invoked at build or test time. Verified by building/running in an environment that has no Fortran/Matlab available.
-3. **`double` is preserved under a single-precision AMReX build.** With AMReX configured `amrex::Real = float`, the library's tables and entry points still use `double`, and the Layer-1 machine-precision exactness checks (affine-in-log, node identity) still pass at the `~1e-14` tier — proving the value type is pinned independently of `amrex::Real`.
+3. **`double` is preserved under a single-precision AMReX build.** With AMReX configured `amrex::Real = float`, the library's tables and entry points still use `double`, and the machine-precision exactness checks (affine-in-log, node identity) still pass at the `~1e-14` tier — proving the value type is pinned independently of `amrex::Real`.
 4. **AMReX source resolves.** The cited `amrex/Src/Base/AMReX_GpuContainers.H` header is present in the sibling `amrex` repo (or wherever the build is pointed) and compiles in the CPU/double configuration.
 5. **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, and that its cited `amrex/...` source-of-truth path resolves under `$AMREX_ROOT`.
 
@@ -77,4 +77,4 @@ A fresh agent confirms the build/integration contract is met by these self-conta
 - **CPU-only build is the test target (assumption, non-blocking).** No GPU is required or assumed in this environment; AMReX is built CPU-only / double precision and the suite runs on host. A GPU build is a drop-in (the qualifier macros and `ParallelFor` overloads switch to device forms), but GPU execution is not verified here. See `amrex-device-interface.md`.
 - **`amrex::Real` configuration (assumption, non-blocking).** The contract pins the value type to `double` independently of `amrex::Real`; if an AMReX build sets `amrex::Real = float`, the interpolator's tables and entry points still use `double`. This is a stated requirement the build must enforce, not a property AMReX guarantees.
 - **AMReX source location (assumption, non-blocking).** The sibling `amrex` repo is the available source in this environment; a build elsewhere may point at an installed AMReX or a different checkout. The contract is the CPU-only / double-precision configuration and the header surface above, not a specific path.
-- **No Fortran/Matlab toolchain (assumption, non-blocking).** This environment has no Fortran/Matlab build capability, and the contract requires none: the library is pure C++/AMReX and Layer-2 fixtures are committed data generated offline. See `regression-suite-design.md`.
+- **No Fortran/Matlab toolchain (assumption, non-blocking).** This environment has no Fortran/Matlab build capability, and the contract requires none: the library is pure C++/AMReX. See `regression-suite-design.md`.

@@ -168,7 +168,7 @@ For each table the reader produces, in host memory: the axis coordinate arrays (
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against the committed snapshots and (where present) the real production tables:
 
@@ -176,10 +176,6 @@ Run against the committed snapshots and (where present) the real production tabl
 2. **Round-trip layout (when a real table is present).** Read a known dataset (e.g. EOS `/ThermoState/Density`) and confirm its length equals the documented extent (185) and that addressing element `(iρ, iT, iYe)` of a 3D sub-table by the flat-offset formula reproduces the value `h5dump` reports at the matching C-order index — confirming the column-major reversal is applied correctly.
 3. **Offset-dimensionality check (when a real table is present).** Confirm `/DependentVariables/Offsets` reads as a rank-1 dataset of length `nVariables`, and that any scattering `Offsets` reads as a rank-2 dataset of shape `(nOpacities, nMoments)`.
 4. **Legacy-fallback check.** Confirm the reader opens `/EmAb` on the production table, and that the documented fallback to `/EmAb_CorrectedAbsorption` is implemented for a table lacking `/EmAb` (a synthetic or legacy fixture).
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-This is a reader contract, not an interpolation; "parity" here means the host arrays a C++ reader produces are byte-for-byte identical (after the documented column-major interpretation) to what the weaklib Fortran reader produces from the same `.h5` file. A pending golden fixture would capture, for the pinned tables, the expected axis arrays + offsets + a checksum of each value array as read by the weaklib reader at the pinned commit. Until that exists, the structural-conformance check (Layer 1) against the committed snapshots is the active gate. See `fortran-parity-and-tolerances.md`.
 
 ### Mechanical (validator)
 
@@ -198,4 +194,4 @@ This is a reader contract, not an interpolation; "parity" here means the host ar
 - **Concrete offsets and grid extents live only in the `.h5` files (assumption, non-blocking).** The numeric `Offsets` values and the energy/η grid node coordinates are written at table-generation time and exist only inside the production tables (research OQ#3). This spec pins the *layout* (names, shapes, dimensionality, dtype, recovery formula); the tables carry the numbers. The committed `*.h5ls` snapshots pin the structure but not the values.
 - **Legacy-table surface beyond the named fallbacks (assumption, non-blocking).** This spec pins the fallbacks weaklib's current reader implements (`EmAb_CorrectedAbsorption`; optional `Zoom`/`Edge`/`Width`; optional `EmAb Parameters`/`EC_table`). Older or hand-edited tables may differ in ways not exercised by the six pinned production tables; a reader targeting only those tables (the pinned set) need not handle unseen variants, but the named fallbacks above are required because they appear in the weaklib reader path.
 - **Dependent-variable slot assignment is read, not hard-coded (assumption, non-blocking).** Which `/DependentVariables` slot is Pressure vs. Entropy etc. is authoritative via the `/DependentVariables/i<Name>` datasets and the `Names` ordering, not assumed by position; `SwapDependentVariables` in weaklib can reorder them in place. A reader keys variables by name/`i*` slot, not by a fixed index.
-- **Layer-2 reader-parity fixtures are future work (assumption, non-blocking).** No weaklib-reader-produced golden arrays exist in this environment; the structural-conformance check against the committed snapshots is the active gate, and the weaklib reader remains the source of truth for byte-level interpretation. See `fortran-parity-and-tolerances.md`.
+- **Reader byte-level interpretation (assumption, non-blocking).** The weaklib reader remains the source of truth for byte-level interpretation of the production tables; the structural-conformance check against the committed snapshots is the active gate that the C++ reader honors that interpretation. See `fortran-parity-and-tolerances.md`.

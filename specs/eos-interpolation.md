@@ -57,7 +57,7 @@ This `(ρ, T, Yₑ)` order, these units, and the `LogInterp = [1, 1, 0]` log/log
 - Evaluate: `Interpolant` — the recovered physical value of the dependent variable in its own units.
 - Differentiate: additionally `Derivative(1:3) = (∂value/∂ρ, ∂value/∂T, ∂value/∂Yₑ)` in physical units per unit of each independent variable.
 
-### Reference table (anchors fixtures and Layer-1 checks)
+### Reference table (anchors the regression-suite checks)
 
 `wl-EOS-SFHo-15-25-50.h5`, pinned by path + `sha256` in `specs/fixtures/tables.provenance`; its structure is committed at `specs/fixtures/wl-EOS-SFHo-15-25-50.h5ls`. The thermodynamic axes are stored under group `/ThermoState` (`/ThermoState/Density` `[185]`, `/ThermoState/Temperature` `[81]`, `/ThermoState/Electron Fraction` `[30]`), and each dependent variable under group `/DependentVariables` (e.g. `/DependentVariables/Pressure`, shape `{30, 81, 185}` in `h5ls` C-order = Fortran `(185, 81, 30) = (nρ, nT, nYe)`), with per-variable additive offsets in `/DependentVariables/Offsets` `[15]`. Real grid extents in this table: ρ ∈ [1.66054e3, 3.16409e15] g/cm³, T ∈ [1.16045e9, 1.83919e12] K, Yₑ ∈ [0.01, 0.6]. Full on-disk contract: `table-format-and-io.md`.
 

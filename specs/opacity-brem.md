@@ -23,7 +23,7 @@ over the three effective densities `ρ·xₚ`, `ρ·xₙ`, `ρ·√(xₚ·xₙ)`
 In scope:
 - The single-point **aligned, summed** evaluate contract: at fixed energy indices `(iE', iE)` and `moment` index, interpolate one kernel value bilinearly in `(log10 ρ, log10 T)` for each of the three effective densities, then accumulate `Σ_l Alpha(l)·Interp_l`.
 - Independent-variable order/units; which coordinates arrive **pre-`LOG10`** (`ρ`, `T`) and which axes are not interpolated (`E'`, `E`, `moment`).
-- The effective-density decomposition `Alpha_Brem = [1, 1, 28/3]` over `ρ·xₚ`, `ρ·xₙ`, `ρ·√(xₚ·xₙ)` as a Layer-1 closure check.
+- The effective-density decomposition `Alpha_Brem = [1, 1, 28/3]` over `ρ·xₚ`, `ρ·xₙ`, `ρ·√(xₚ·xₙ)` as a closure check.
 - The 2D offset dimensionality `Offsets[nOpacities, nMoments]`.
 - Column-major indexing of the 5D `(E', E, moment, ρ, T)` table and its 4D `(E', E, ρ, T)` sub-table at a fixed `moment`.
 - That **both energy triangles are computed** (no symmetry fill) — the explicit distinction from NES/Pair.
@@ -57,7 +57,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
 
 The effective densities and `Alpha_Brem` weights are pinned by the reference consumer (thornado `Modules/Opacities/NeutrinoOpacitiesComputationModule.F90`): `Alpha_Brem(3) = [1.0d0, 1.0d0, 28.d0/3.d0]`, and the three effective densities `LogDX_P(1..3) = LOG10(ρ·xₚ)`, `LOG10(ρ·xₙ)`, `LOG10(ρ·√|xₚ·xₙ|)` (each divided by the density unit), passed as the rows of `LogD` to `SumLogInterpolateSingleVariable_2D2D_Custom_Aligned`. These are cited as consumer/provenance data; this spec pins the interpolation-plus-decomposition contract, fixtures supply any table-specific numbers.
 
-The aligned summed `_Point` body is the generator-of-record for Layer-2 parity (see `fortran-parity-and-tolerances.md`); the effective-density decomposition is the Layer-1 closure check that gates the loop today.
+The aligned summed `_Point` body is the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`); the effective-density decomposition is the closure check of the regression suite.
 
 ## Inputs & outputs
 
@@ -115,7 +115,7 @@ The critical distinctions a fresh agent must observe:
   where `BiLinear_l` is the `(log10 ρ_l, log10 T)` bilinear interpolation at the fixed corner stack `(iE', iE, iD(l), iT)`. Units are the channel's stored units (`/Scat_Brem_Kernels/Units`).
 - For the channel as a whole, the kernel array over the **entire** energy plane: **both** the lower triangle `iE' ≤ iE` and the upper triangle `iE' > iE` are computed by the same decomposition formula. There is **no symmetry fill** — unlike NES (detailed balance) and Pair (crossing symmetry), every `(iE', iE)` entry is interpolated independently. (The Fortran aligned array form iterates only `i ≤ j` for performance, but the standalone Brem wrapper computes the full block; this spec's contract is that every requested `(iE', iE)` entry is a direct, independent decomposition with no implied relation to its transpose.)
 
-### Reference table (anchor fixtures and Layer-1 checks)
+### Reference table (anchor the regression-suite checks)
 
 - **Brem:** `wl-Op-SFHo-15-25-50-E40-Brem.h5`, pinned by path + `sha256` in `specs/fixtures/tables.provenance`; structure committed at `specs/fixtures/wl-Op-SFHo-15-25-50-E40-Brem.h5ls`. The kernels live under `/Scat_Brem_Kernels/S_sigma` (`h5ls` `{81, 185, 1, 40, 40}` = Fortran `(40, 40, 1, 185, 81) = (nE', nE, nMom, nρ, nT)`), the **2D** offsets under `/Scat_Brem_Kernels/Offsets` `{1, 1}` = Fortran `(1, 1) = (nOpacities, nMoments)`, the energy axis under `/EnergyGrid/Values` `[40]`, the density axis under `/ThermoState/Density` `[185]`, and temperature under `/ThermoState/Temperature` `[81]`. Note there is **no `/EtaGrid` group** (Brem has no η axis), distinguishing the Brem file from the NES/Pair files.
 
@@ -152,7 +152,7 @@ Because both `ρ` and `T` are interpolated **linearly in their `LOG10`'d coordin
 
 Order of operations: the offset recovery `- OS` is applied **per effective density, inside the sum** (each `Interp_l` is a recovered physical value), and the weights `Alpha_Brem` multiply the recovered values — not the log-space values. This matches `wlInterpolationModule.F90:1559-1564` (the `10**(...) - OS` is inside the `DO l` loop and `SumInterp = SumInterp + Alpha(l) * Interp`).
 
-### The effective-density decomposition (Layer-1 closure check)
+### The effective-density decomposition (closure check)
 
 The defining, machinery-independent statement of Brem correctness is the fixed-weight decomposition over three effective densities:
 
@@ -197,7 +197,7 @@ Replicate the permissive behavior exactly (see `fortran-parity-and-tolerances.md
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against both synthetic in-suite tables and the real reference table `wl-Op-SFHo-15-25-50-E40-Brem.h5`:
 
@@ -209,10 +209,6 @@ Run against both synthetic in-suite tables and the real reference table `wl-Op-S
 6. **Both-triangles-computed (machine-precision tier).** On a synthetic table that is *not* symmetric under transposing the two energy indices (`Table(i, j, …) ≠ Table(j, i, …)`), confirm that the `(iE', iE)` output and the `(iE, iE')` output each independently equal their own decomposition — i.e. no entry is derived from its transpose and no detailed-balance/crossing fill is applied.
 7. **Boundary extrapolation (no tolerance / exact relation).** A query just outside an edge of `ρ` (for one effective density) or `T` must make that effective density's term equal the edge cell's linear extrapolation (the same bilinear formula evaluated with the unclamped delta) — confirming clamp-index-but-not-delta.
 8. **NaN propagation (NaN-equality).** A query with a non-positive effective density `ρ_l` or non-positive `T` must produce a NaN `SumInterp`.
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-Compare `SumInterp` (default tier `1e-12`/`1e-30`) against committed golden fixtures generated offline by `SumLogInterpolateSingleVariable_2D2D_Custom_Aligned` at the pinned commit — over `(iE', iE, moment, ρ, T)` query points (with the three effective densities derived from `ρ`, `xₚ`, `xₙ`) drawn from `wl-Op-SFHo-15-25-50-E40-Brem.h5`. Until fixtures exist these tests report **pending**, not passing (see `fortran-parity-and-tolerances.md`).
 
 ### Mechanical (validator)
 
@@ -233,8 +229,7 @@ Compare `SumInterp` (default tier `1e-12`/`1e-30`) against committed golden fixt
 ## Open questions / assumptions
 
 - **Brem `GetIndexAndDelta` / `LinearInterp_Array_Point` overload provenance (research OQ#2 — assumption, explicitly non-blocking).** weaklib's standalone full-energy-grid Brem wrapper `wlInterpolateOpacity_Brem` (`wlOpacityInterpolationModule.f90:236-277`) calls an unsuffixed generic `GetIndexAndDelta(…)` and a generic `LinearInterp_Array_Point(ii, jj, iD, iT, iY, dD, dT, dY, OS, Table)`. Both are resolved by Fortran generic-interface overload at `wlInterpolationUtilitiesModule.f90:43-59`: `GetIndexAndDelta` is the `_Lin`/`_Log` interface and `LinearInterp_Array_Point` dispatches by argument shape to `LinearInterp{1..5}D_*DArray_Point`. From the call's argument signature (five integer indices `ii, jj, iD, iT, iY` + three deltas `dD, dT, dY` + `OS` + a rank-5 `Table`), the selected overload is the **5D leaf** `LinearInterp5D_5DArray_Point` — a full 5D interpolation over `(E', E, ρ, T, Yₑ)`-style axes, *not* the 2D-aligned leaf. The exact pinned definition of that 5D leaf for this revision was not traced end-to-end (the standalone wrapper path is not what the reference consumer uses). **This is off the reference consumer's critical path:** `wlOpacityInterpolationModule.f90` is never `USE`d by thornado, whose production Brem path (`NeutrinoOpacitiesComputationModule.F90:2471-2473`) drives the **aligned, summed** routine `SumLogInterpolateSingleVariable_2D2D_Custom_Aligned` on the pre-aligned `Brem_AT` table (research §7). This spec therefore pins the **aligned** path — whose inner kernel `LinearInterp2D_4DArray_2DAligned_Point` (`wlInterpolationUtilitiesModule.F90:602-627`) *is* fully traced — as the source-of-truth interpolation contract, and the standalone-wrapper overload is recorded here purely as a provenance note for weaklib's full-energy-grid path, which the C++ port does not need to reproduce. The Ralph loop is never blocked on this overload: Brem correctness is anchored to the aligned bilinear interpolation plus the effective-density decomposition invariant, both fully specified above.
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden Brem interpolation outputs exist or can be generated in this environment; Layer-2 tests ship **pending**, the named aligned summed routine remains the generator-of-record, and the Ralph loop gates on Layer 1. See `fortran-parity-and-tolerances.md`.
-- **Concrete offsets and ρ/T grid extents (assumption, non-blocking).** The 2D `Offsets[nOpacities, nMoments]` value(s) and the density/temperature node coordinates live only in the production `.h5` file (research OQ#3). This spec pins the recovery contract, offset dimensionality, the effective-density set, and the decomposition weights; the fixture/table supplies the numbers. Layer-1 exactness and decomposition checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production values.
+- **Concrete offsets and ρ/T grid extents (assumption, non-blocking).** The 2D `Offsets[nOpacities, nMoments]` value(s) and the density/temperature node coordinates live only in the production `.h5` file (research OQ#3). This spec pins the recovery contract, offset dimensionality, the effective-density set, and the decomposition weights; the fixture/table supplies the numbers. The exactness and decomposition checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production values.
 - **`Alpha_Brem` and the effective densities are pinned by the reference consumer (assumption).** `Alpha_Brem = [1, 1, 28/3]` and the three effective densities `ρ·xₚ`, `ρ·xₙ`, `ρ·√(xₚ·xₙ)` are taken from thornado `NeutrinoOpacitiesComputationModule.F90` (`Alpha_Brem(3) = [1.0d0, 1.0d0, 28.d0/3.d0]`; `LogDX_P(1..3)`), which is the reference consumer of the aligned Brem table. These are treated as fixed physics constants of the decomposition, not table data. If a future table is generated with a different decomposition convention, the weights/effective densities must be re-read from the consumer-of-record at that table's pinned commit; the interpolation-plus-decomposition *structure* in this spec is unchanged.
 - **`nMoments` is read from the table (assumption, non-blocking).** In the pinned Brem table `nMoments = 1` (the `S_sigma {81, 185, 1, 40, 40}` and `Offsets {1, 1}` snapshot) and `nOpacities = 1`. The interpolation contract is per-`(opacity, moment)` (one `OS` + one log-stored 4D `(E', E, ρ, T)` sub-table); the counts are read per `table-format-and-io.md`. A table with `nMoments > 1` interpolates each moment slice independently with its own `Offsets(opacity, moment)`.
 - **Temperature/density units (assumption).** This spec assumes the Brem `(ρ, T)` axes use the EOS/EmAb/Iso convention (`ρ` in g cm⁻³, `T` in K), in contrast to the MeV temperature of NES/Pair. The on-disk `/ThermoState/Units` dataset is authoritative; the consumer must pass `ρ`, `T` in the same units the `/ThermoState/Density` / `/ThermoState/Temperature` grids were tabulated in.
