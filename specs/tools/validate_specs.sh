@@ -169,7 +169,6 @@ SPEC_REQUIRE_IN_SPEC=(
   "regression-suite-design.md|||wlInterpolationUtilitiesModule.F90"
   "regression-suite-design.md|||1e-12"
   "regression-suite-design.md|||1e-10"
-  "regression-suite-design.md|||pending"
   "regression-suite-design.md|||in-bounds"
   "regression-suite-design.md|||out-of-range"
   "regression-suite-design.md|||NaN-input"

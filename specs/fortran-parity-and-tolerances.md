@@ -12,7 +12,7 @@ In scope:
 - The universal `value = 10**(stored) - offset` log-space convention and which axes are interpolated in log vs. linear space vs. not interpolated at all.
 - Fortran column-major memory layout (first index fastest-varying) and the C-shape reversal it implies.
 - The permissive boundary/out-of-range/NaN behavior to replicate bit-for-bit.
-- The two-layer regression scheme: Layer 1 (self-contained checks) as the sole active gate; Layer 2 (Fortran-parity golden fixtures) specified-but-pending.
+- The regression scheme: self-contained closed-form/invariant checks as the regression suite.
 
 Out of scope:
 - The per-channel geometry, independent-variable lists, and physics invariants (each leaf spec owns its own).
@@ -27,7 +27,7 @@ The authoritative behavior is the weaklib Fortran source at the pinned commit re
 - `weaklib/Distributions/Library/wlInterpolationUtilitiesModule.F90` — the stateless scalar primitives: `Index1D` / `Index1D_Lin` / `Index1D_Log` (index search and edge handling), `GetIndexAndDelta_Lin` / `GetIndexAndDelta_Log` (fractional in-cell deltas), the `Linear` / `BiLinear` / `TriLinear` / `TetraLinear` / `PentaLinear` multilinear basis and their analytic partial derivatives, and the `LinearInterp*D_*DArray_Point` / `LinearInterpDeriv*_Point` leaf routines that own the `10**(...) - OS` recovery.
 - `weaklib/Distributions/Library/wlInterpolationModule.F90` — the public `LogInterpolate*` / `SumLogInterpolate*` entry points (array and `_Point` forms), the device-annotated private copies of the primitives, and the constant `ln10 = LOG(10)`.
 
-The named generator-of-record for Layer-2 parity is the matched `_Point` (single-query, scalar, allocation-free) routine for each leaf, named in that leaf's "Source of truth" section.
+The authoritative oracle that defines "correct" is the matched `_Point` (single-query, scalar, allocation-free) routine for each leaf, named in that leaf's "Source of truth" section.
 
 ## Inputs & outputs
 
@@ -95,9 +95,9 @@ The C++ port performs the same IEEE-754 double arithmetic, but order-of-operatio
 
 | Tier | Bound | Applies to |
 |---|---|---|
-| Default parity | relative `rtol = 1e-12` with absolute floor `atol = 1e-30` | Layer-2 parity of a single interpolated value against the Fortran `_Point` oracle |
-| Relaxed | `1e-10` | Layer-2 parity of analytic derivatives and of inversion-recovered T; the Layer-1 round-trip inversion invariant |
-| Machine-precision exactness | `~1e-14` (a few ULP) | Layer-1 exactness checks that have closed-form exact answers: affine-in-log tables, constant tables, node identity |
+| Default parity | relative `rtol = 1e-12` with absolute floor `atol = 1e-30` | the definition of correctness for a single interpolated value against the named `_Point` oracle |
+| Relaxed | `1e-10` | analytic derivatives and inversion-recovered T; the round-trip inversion invariant |
+| Machine-precision exactness | `~1e-14` (a few ULP) | self-contained exactness checks that have closed-form exact answers: affine-in-log tables, constant tables, node identity |
 | (no tolerance) | exact / NaN-equality | boundary index behavior, NaN propagation, inversion integer error codes |
 
 The pass/fail comparison for the parity and relaxed tiers is the mixed relative/absolute form:
@@ -128,27 +128,18 @@ offset = i0 + n0*( i1 + n1*( i2 + ... + n_{D-2}*( i_{D-1} ) ... ) )
 
 ### The named oracle
 
-For every leaf, "correct" for a single query is, by definition, the value the matched Fortran `_Point` routine produces on identical inputs (same axis arrays, same offset, same table values) at the pinned weaklib commit. The leaf spec names that routine by file and line. Layer-2 parity (below) is the gate that enforces this once fixtures exist; until then the Layer-1 checks (which the `_Point` routine also satisfies by construction) are the active gate.
+For every leaf, "correct" for a single query is, by definition, the value the matched Fortran `_Point` routine produces on identical inputs (same axis arrays, same offset, same table values) at the pinned weaklib commit. The leaf spec names that routine by file and line. The self-contained checks (below) enforce this; the `_Point` routine satisfies them by construction.
 
 ## Verification
 
-### The two-layer regression scheme
+### The regression scheme — self-contained checks
 
-- **Layer 1 — self-contained checks (the sole active gate).** Computed entirely within the C++/AMReX test build, with no external oracle, against both synthetic in-suite tables and the real production tables named by each leaf:
+- **Self-contained checks (the regression suite).** Computed entirely within the C++/AMReX test build, with no external oracle, against both synthetic in-suite tables and the real production tables named by each leaf:
   - *Affine-in-log exactness:* build a table whose `stored = log10(value+offset)` is an exact affine function of the (log/linear) axis coordinates; multilinear interpolation must reproduce it to the machine-precision tier at *any* interior query, not just at nodes. The constant table is the degenerate case.
   - *Node identity:* querying exactly at a grid node returns that node's recovered value (`10**(stored) - offset`) to the machine-precision tier.
   - *Derivative checks:* the analytic-derivative chain-rule factors above, verified against the affine-in-log closed form and/or a tight finite-difference at the relaxed tier.
   - *Symmetry / closure invariants:* detailed balance (NES), crossing symmetry (Pair), the `[1,1,28/3]` density decomposition (Brem), round-trip inversion (`eos-inversion`) — each owned by its leaf spec.
   - *Boundary / NaN behavior:* clamp-index-but-not-delta extrapolation past the edge; NaN propagation on non-positive log argument; inversion error codes and `T=0`-on-failure.
-- **Layer 2 — Fortran-parity golden fixtures (specified, PENDING).** Small committed files of `{inputs, expected outputs, the offsets/grid metadata used}`, produced **offline** by someone with a weaklib build at the pinned commit, from the named Fortran `_Point` generator-of-record routines, and committed with a provenance manifest. The C++ suite reads and compares them at the default/relaxed tiers; it never builds or runs Fortran/Matlab. Until fixtures are supplied, Layer-2 tests are reported as **pending**, never as passing, and the Ralph-loop pass/fail is driven entirely by Layer 1.
-
-### Layer-2 fixture format and provenance manifest (the pending contract)
-
-When Layer 2 is switched on, each fixture set is committed as a self-describing table of records, each record carrying: the query coordinates (in the same units/space the device entry point expects), the per-quantity `offset(s)` and the axis arrays (or a reference to the pinned production table that supplies them), and the expected interpolant (and, where applicable, the expected derivative vector). A sibling provenance manifest records, per fixture set: the weaklib commit, the exact `_Point` routine that generated it, the production-table path + `sha256` the inputs were drawn from, the host/compiler, and the regeneration command. The format is otherwise implementation freedom (CSV, JSON, or a small binary), provided it is self-describing and committed in-repo.
-
-### Offline regeneration procedure (the pending contract)
-
-Layer-2 fixtures are regenerated outside this environment, where a weaklib build exists: at the pinned weaklib commit, drive the named `_Point` routine over the chosen query set drawn from the pinned production table, and write the inputs + outputs + metadata in the fixture format above, updating the provenance manifest. This environment is read-only for Fortran; it cannot generate Layer-2 fixtures.
 
 ### How this spec is mechanically checked
 
@@ -157,11 +148,9 @@ Layer-2 fixtures are regenerated outside this environment, where a weaklib build
 ## Implementation freedom
 
 - The internal data structures, the order of floating-point operations within the multilinear kernel, and whether the innermost helpers take a pointer+strides or unpacked scalars — provided the result meets the stated tolerance tiers.
-- The Layer-2 fixture serialization format (subject to the self-describing/committed requirement above).
-- The Layer-1 synthetic-table construction (sizes, axis ranges) — provided the affine-in-log / constant / node-identity properties hold by construction.
+- The synthetic-table construction (sizes, axis ranges) — provided the affine-in-log / constant / node-identity properties hold by construction.
 - The test framework, harness, and file layout (see `regression-suite-design.md`).
 
 ## Open questions / assumptions
 
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden interpolation outputs exist in this environment, and none can be generated here (Fortran/Matlab are read-only sources of truth). Layer-2 tests ship **pending**; the Fortran `_Point` routines remain the named generator-of-record, and the format/manifest/regeneration procedure above is the contract for switching Layer 2 on later. The Ralph loop gates on Layer 1 only.
-- **Concrete offsets and grid extents (assumption, non-blocking).** The per-quantity `Offsets` values and the energy/η grid extents live only in the production `.h5` files (research OQ#3). This spec pins the *contract* (`10**(stored) - offset`, which axes are log/linear); the fixtures and the live tables carry the numbers. Layer-1 checks that need exact answers use synthetic tables whose offsets are chosen by the suite, so they do not depend on the unknown production offsets.
+- **Concrete offsets and grid extents (assumption, non-blocking).** The per-quantity `Offsets` values and the energy/η grid extents live only in the production `.h5` files (research OQ#3). This spec pins the *contract* (`10**(stored) - offset`, which axes are log/linear); the live tables carry the numbers. Self-contained checks that need exact answers use synthetic tables whose offsets are chosen by the suite, so they do not depend on the unknown production offsets.

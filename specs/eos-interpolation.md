@@ -11,7 +11,7 @@ In scope:
 - The single-point evaluate-and-differentiate contract: `(ρ, T, Yₑ) → value, (∂value/∂ρ, ∂value/∂T, ∂value/∂Yₑ)`.
 - Units, valid ranges, the log/linear axis split, the offset recovery, column-major table indexing.
 - Boundary/out-of-range/NaN behavior (bit-for-bit with weaklib).
-- Layer-1 closed-form checks and the `1e-10` derivative relaxation with rationale.
+- The self-contained closed-form checks and the `1e-10` derivative relaxation with rationale.
 
 Out of scope:
 - Recovering T from a dependent variable (the inversion direction) — see `eos-inversion.md`.
@@ -28,7 +28,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
   - `LogInterpolateDifferentiateSingleVariable_3D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1814-1844`) — the matched evaluate-and-differentiate routine. Signature `( D, T, Y, Ds, Ts, Ys, OS, Table, Interpolant, Derivative )` with `Derivative(1:3)` = `(∂/∂ρ, ∂/∂T, ∂/∂Yₑ)`; it uses `GetIndexAndDelta_Log`/`_Lin` plus the per-axis chain-rule scale factors `aD`/`aT`/`aY` and `LinearInterpDeriv3D_3DArray_Point`.
 - `weaklib/Distributions/Library/wlInterpolationUtilitiesModule.F90` — the shared primitives these call: `GetIndexAndDelta_Log` / `GetIndexAndDelta_Lin`, the `TriLinear` basis and its partials `dTriLineardX1/2/3`, and the leaf routines `LinearInterp3D_3DArray_Point` / `LinearInterpDeriv3D_3DArray_Point` that own the `10**(...) - OS` recovery and the `(value+OS)·a·∂/∂d` derivative assembly.
 
-These `_Point` routines are the generator-of-record for Layer-2 parity (see `fortran-parity-and-tolerances.md`).
+These `_Point` routines are the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`).
 
 ## Inputs & outputs
 
@@ -107,7 +107,7 @@ Replicate the permissive behavior exactly (see `fortran-parity-and-tolerances.md
 
 ## Verification
 
-### Layer 1 — self-contained checks (the active gate)
+### Self-contained checks (the regression suite)
 
 Run against both synthetic in-suite tables and the real reference table `wl-EOS-SFHo-15-25-50.h5`:
 
@@ -116,10 +116,6 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 3. **Derivative chain-rule scale factors (relaxed tier `1e-10`).** On the affine-in-log table the analytic derivatives have a closed form; the returned `Derivative(1:3)` must match it. Cross-check against a tight central finite-difference at the relaxed tier on the real table.
 4. **Boundary extrapolation (no tolerance / exact relation).** A query just outside an edge must equal the edge cell's linear extrapolation (compare against the same trilinear formula evaluated with the unclamped delta) — confirming clamp-index-but-not-delta.
 5. **NaN propagation (NaN-equality).** A query with non-positive ρ or T must produce a NaN `Interpolant`.
-
-### Layer 2 — Fortran parity (specified, PENDING)
-
-Compare `Interpolant` (default tier `1e-12`/`1e-30`) and `Derivative` (relaxed tier `1e-10`) against committed golden fixtures generated offline by `LogInterpolateSingleVariable_3D_Custom_Point` / `LogInterpolateDifferentiateSingleVariable_3D_Custom_Point` at the pinned commit, over a query set drawn from `wl-EOS-SFHo-15-25-50.h5`. Until fixtures exist these tests report **pending**, not passing (see `fortran-parity-and-tolerances.md`).
 
 ### Mechanical (validator)
 
@@ -135,6 +131,5 @@ Compare `Interpolant` (default tier `1e-12`/`1e-30`) and `Derivative` (relaxed t
 
 ## Open questions / assumptions
 
-- **Layer-2 golden fixtures are future work (assumption, non-blocking).** No Fortran-generated golden EOS interpolation outputs exist or can be generated in this environment; Layer-2 tests ship **pending**, the named `_Point` routines remain the generator-of-record, and the Ralph loop gates on Layer 1. See `fortran-parity-and-tolerances.md`.
-- **Concrete per-variable offsets (assumption, non-blocking).** The 15 `Offsets` values for this table live only in `/DependentVariables/Offsets` of the `.h5` file (research OQ#3). This spec pins the recovery contract; the fixture/table supplies the numbers. Layer-1 exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
+- **Concrete per-variable offsets (assumption, non-blocking).** The 15 `Offsets` values for this table live only in `/DependentVariables/Offsets` of the `.h5` file (research OQ#3). This spec pins the recovery contract; the table supplies the numbers. The self-contained exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
 - **Dependent-variable index assignment (assumption, non-blocking).** The mapping of variable slot → physical quantity (e.g. Pressure, Entropy, …) is authoritative via the `/DependentVariables/i*` datasets and the `Names` ordering in the file, not hard-coded here. This spec's contract is per-variable (one `OS` + one log-stored sub-table); which slot is which is read from the table per `table-format-and-io.md`.
