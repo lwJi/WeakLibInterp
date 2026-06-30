@@ -1,5 +1,6 @@
 .tasks
 .research
+.build
 
 *.pyc
 .vscode
