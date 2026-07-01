@@ -24,7 +24,7 @@ The mission/constraints auto-load from `@CLAUDE.md`. Your orchestrator's dispatc
 
 **Approach mode** (build loop) → write `.build/<task>/approach.md`: a self-contained brief (≤10 bullets: what to implement, in which files, which `src/lib` to reuse, which tests to write, known risks) complete enough that the builder implements *from this file alone*. Also judge whether the increment already exists with its required tests passing. Reply exactly `done STATUS=<already-done|needs-work> .build/<task>/approach.md`.
 
-**Fix mode** (build loop retry) → write `.build/<task>/fix.md`: a concrete fix plan derived from the failing `build.md` + relevant `*.findings.md`. Reply exactly `done .build/<task>/fix.md`.
+**Fix mode** (build loop retry) → write `.build/<task>/fix.md`: a concrete fix plan derived from the failing `build.md`/`build.log`, the original `approach.md`, and relevant `*.findings.md` — restate enough of the approach that the builder can retry from this file alone. Reply exactly `done .build/<task>/fix.md`.
 
 ## Discipline
 

@@ -25,7 +25,7 @@ You are the orchestrator for implementing functionality per the specs, using pin
 
 2. **Decide approach (orchestrator schedules `ralph-synthesizer`)**:
     - Wait for ALL Phase 1 agents to return (each returns `done <path>`).
-    - Dispatch ONE `ralph-synthesizer` in approach mode to read the `*.findings.md` and serialize `.build/<task>/approach.md` per its definition (request 'ultrathink' for hard reasoning); it judges priority across the findings.
+    - Dispatch ONE `ralph-synthesizer` in approach mode with the chosen item's one-line task, its `spec:` path, and its `tests:` field, plus the `*.findings.md` paths to read; it serializes `.build/<task>/approach.md` per its definition (request 'ultrathink' for hard reasoning) and judges priority across the findings.
     - Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
     - Route on its return line `STATUS=already-done|needs-work`: if `already-done`, do NOT implement — skip to Phase 5, mark the item done in `@TODO.md`, and commit that update (one thing per loop); otherwise continue to Phase 3.
 
@@ -35,8 +35,8 @@ You are the orchestrator for implementing functionality per the specs, using pin
     - It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
 
 4. **Reduce & iterate (orchestrator)**:
-    - Read `.build/<task>/build.md` (read `build.log` only if insufficient).
-    - If FAIL and non-trivial to debug: dispatch a `ralph-synthesizer` in fix mode (request 'ultrathink') with the failing `build.md` + relevant `*.findings.md`, writing a fix plan to `.build/<task>/fix.md` per its definition.
+    - Read `.build/<task>/build.md` — never `build.log`; raw logs stay out of your window (the fix-mode synthesizer reads them).
+    - If FAIL and non-trivial to debug: dispatch a `ralph-synthesizer` in fix mode (request 'ultrathink') with the item's `spec:` path and the failing `build.md` + `build.log` + `approach.md` + relevant `*.findings.md`, writing a fix plan to `.build/<task>/fix.md` per its definition.
     - Re-dispatch the single `ralph-builder` with `fix.md`; repeat until PASS.
     - **Cap at ~3 builder attempts**: if it still FAILs, stop — do NOT commit partial code — end the iteration, leaving the item incomplete in `@TODO.md` with a `notes:` line capturing what was tried, the suspected cause, and the next thing to try (so the next loop resumes from that reasoning and the orchestrator window stays bounded).
     - All required tests must exist and pass before an item is marked done.
