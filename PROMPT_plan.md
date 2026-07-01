@@ -2,24 +2,15 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
 
 ## Context flow (orchestrator)
 
-- **You own the pen.** Only the orchestrator writes `@TODO.md` — one coherent author, no races.
-- **Roles are pinned agents; you schedule them.** Dispatch `ralph-researcher` (read-only) to study slices, `ralph-synthesizer` to distill findings, `ralph-spec-author` to author a genuinely-missing spec. Each agent already carries its read/write/return discipline (it writes only the one file you name, never `@TODO.md`, never runs git) — so your dispatch prompt only supplies the *variable* parts below. You author `@TODO.md` yourself; agents never do.
-- **The handoff is the prompt.** Into every dispatch paste the mission block (below) verbatim, then the agent's variable inputs: its slice/inputs, its single output-file path, the exact section headings, and the exact one-line return string it must reply with.
+- **You own the pen.** Only the orchestrator writes `@TODO.md` — one coherent author, no races. Agents never write it.
+- **You schedule pinned agents.** Dispatch `ralph-researcher` (read-only) to study slices, `ralph-synthesizer` to distill findings, `ralph-spec-author` to author a genuinely-missing spec. Each agent already carries its own read/write/return discipline — your dispatch supplies only the *variable* parts: its slice/inputs, its single output-file path, the exact section headings, and the exact one-line return string. (Goal + constraints auto-load from `@CLAUDE.md` — never paste them.)
 - **Findings live on disk; your window stays lean.** Researchers write `.research/<area>.findings.md` (`<area>` = unique kebab-case slug). You read only the distilled synthesis, never the raw findings.
-
-## Mission block — paste this verbatim into every dispatch
-
-> **Ultimate goal:** A GPU-friendly C++ reimplementation of weaklib's equation-of-state (EOS) and opacity interpolators, exposed as AMReX-native device functions. Judge relevance of everything you read against this goal.
->
-> **Constraints:**
-> - Do NOT assume functionality is missing; confirm with code search before concluding absence.
-> - Treat `src/lib` as the project's standard library. Prefer consolidated, idiomatic implementations there over ad-hoc copies; flag duplication.
 
 ## Phases
 
 **0 — Inventory & partition (orchestrator).** Enumerate `specs/*`, `src/*`, `src/lib/*` (Glob/LS). Read the current `@TODO.md` (treat as possibly stale) to seed the starting point. Partition the codebase into **disjoint, gapless slices** — no two agents study the same thing. **Recreate `.research/` empty each run** (`rm -rf .research && mkdir .research`) so no orphan findings from a prior, differently-sliced run survive to pollute synthesis. Name each slice's output `.research/<area>.findings.md`, where `<area>` is a unique kebab-case slug (no two slices collide).
 
-**1 — Fan-out research (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = the mission block (pasted) + its slice (which files/dirs) + its `.research/<area>.findings.md` output path + the section headings and return string below. Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for `TODO`, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
+**1 — Fan-out research (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = its slice (which files/dirs) + its `.research/<area>.findings.md` output path + the section headings and return string below (the goal/constraints come from `@CLAUDE.md`). Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for `TODO`, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
 
 Sections for `.research/<area>.findings.md` (use exactly these):
 ```
