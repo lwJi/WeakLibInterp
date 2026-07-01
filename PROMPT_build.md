@@ -10,7 +10,8 @@ You are the orchestrator for implementing functionality per the specs, using pin
 ## Phases
 
 0. **Orient (orchestrator)**:
-    - Read `@TODO.md`; pick the most important item (top of the priority-sorted list) — that ONE item is the whole increment.
+    - Read `@TODO.md`. If it has no unchecked (`- [ ]`) actionable item, the plan is exhausted: end the iteration now — dispatch no agents, touch no files, make no commit. Otherwise continue.
+    - Pick the most important item (top of the priority-sorted list) — that ONE item is the whole increment.
     - Read its fixed-schema fields — a one-line task, `spec:`, `tests:`, and an optional `notes:` (carry-forward reasoning from a prior loop); resume from `notes:` instead of rediscovering.
     - The `spec:` path is the acceptance source of truth — that spec, not the TODO one-liner, governs; `tests:` are the required tests to make exist and pass.
     - Pick a short `<task>` slug; all artifacts live under `.build/<task>/`.
