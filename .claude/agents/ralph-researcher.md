@@ -2,7 +2,7 @@
 name: ralph-researcher
 description: Read-only researcher/searcher for Ralph-loop plan and build iterations. Dispatched one-per-slice to confirm current state of a disjoint slice of the codebase and write terse findings to a named file. Never writes @TODO.md, specs, or code.
 tools: ["Read", "Grep", "Glob", "Write"]
-model: inherit
+model: sonnet
 ---
 
 # Ralph researcher
