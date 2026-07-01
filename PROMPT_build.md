@@ -3,7 +3,7 @@ You are the orchestrator for implementing functionality per the specs, using pin
 ## Context flow (orchestrator)
 
 - **You own the pen.** Only the orchestrator writes `@TODO.md`, decides the increment, and runs `git add/commit/push`. Agents never write `@TODO.md` and never commit; they may *propose* `@TODO.md` deltas in their file's `## Notes` (never in the return line), which you apply.
-- **You schedule pinned agents.** Dispatch `ralph-researcher` (read-only) to confirm current state, `ralph-synthesizer` to decide the approach / plan a fix, and the single `ralph-builder` to implement + test. Each agent already carries its own read/write/return discipline — your dispatch supplies only the *variable* parts: its slice/inputs, its single output-file path, the exact section headings, and the exact one-line return string. Request 'ultrathink' when you need the synthesizer for hard reasoning (tricky debugging, architectural/spec calls). (Goal + constraints auto-load from `@CLAUDE.md` — never paste them.)
+- **You schedule pinned agents.** Dispatch `ralph-researcher` (read-only, confirm state), `ralph-synthesizer` (decide approach / plan a fix), and the single `ralph-builder` (implement + test). Each agent's fixed output contract lives in its own definition and the mission auto-loads from `@CLAUDE.md` — your dispatch supplies only the *variable* parts: the task/slice/inputs and its output-file path(s). Request 'ultrathink' for the synthesizer on hard reasoning (tricky debugging, architectural/spec calls).
 - **Artifacts are disk-backed under `.build/<task>/` only** (gitignored). Everything for the chosen task lives there. `.build/` is recreated empty each iteration (Phase 0), so nothing carries over — `@TODO.md` is the only state between loops. Do NOT touch `.research/` — that's the plan loop's.
 - **Reads parallelize; build/test serializes.** Many `ralph-researcher` in parallel (one disjoint slice each). Exactly ONE `ralph-builder` at a time (stateful, must not race).
 
@@ -11,36 +11,15 @@ You are the orchestrator for implementing functionality per the specs, using pin
 
 **0 — Orient (orchestrator).** Read `@TODO.md` and choose the most important item (top of the priority-sorted list) — that ONE item is the whole increment. Each item follows a fixed schema: a one-line task, a `spec:` field, and a `tests:` field (the required tests, part of scope). Take the `spec:` path as the acceptance source of truth — that spec, not the TODO one-liner, governs — and take `tests:` as the required tests to make exist and pass. Pick a short `<task>` slug; all artifacts live under `.build/<task>/`. **Recreate `.build/` empty each iteration** (`rm -rf .build && mkdir .build`) so no stale artifacts from a prior loop survive to mislead you — `@TODO.md` is the only state carried between loops. Decide what must be confirmed in code, and partition it into disjoint, gapless slices.
 
-**1 — Fan-out search (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = the chosen task and its `specs/*.md` path (so it can judge relevance against the acceptance source of truth) + its slice (which files/dirs to confirm) + its `.build/<task>/<area>.findings.md` output path (`<area>` = unique kebab-case slug) + the section headings and return string below (the goal/constraints come from `@CLAUDE.md`). Purpose: confirm current state before implementing.
+**1 — Fan-out search (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = **build mode** + the chosen task and its `specs/*.md` path (so it can judge relevance against the acceptance source of truth) + its slice (which files/dirs to confirm) + its `.build/<task>/<area>.findings.md` output path (`<area>` = unique kebab-case slug). (The researcher's build-mode output contract lives in its definition.) Purpose: confirm current state before implementing.
 
-Sections for `.build/<task>/<area>.findings.md` (use exactly these):
-```
-# <area>
-## Summary             (3–6 bullets: current state vs the chosen task)
-## Relevant evidence   (key file:line anchors the implementer will need)
-## Reuse opportunities (existing src/lib utilities/components to use instead of new)
-## Risks/blockers      (anything that complicates the increment)
-```
-Return string: `done BLOCKERS=<n> REUSE=<n> <path>` (BLOCKERS = risks/blockers, REUSE = reuse opportunities).
-
-**2 — Decide approach (orchestrator schedules `ralph-synthesizer`).** After ALL Phase 1 agents return, use the return-line triage counts (highest BLOCKERS first) to point the synthesizer at the findings in priority order. **Dispatch ONE `ralph-synthesizer` to read the `*.findings.md` and serialize the decision** to `.build/<task>/approach.md` — a self-contained brief (≤10 bullets: what to implement, in which files, which `src/lib` to reuse, which tests to write, known risks) complete enough that the builder implements *from this file alone*. It also judges whether the increment already exists with its required tests passing, and reports that verdict in its return line: `done STATUS=<already-done|needs-work> .build/<task>/approach.md`. Request 'ultrathink' for hard reasoning. Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
+**2 — Decide approach (orchestrator schedules `ralph-synthesizer`).** After ALL Phase 1 agents return, use the return-line triage counts (highest BLOCKERS first) to point the synthesizer at the findings in priority order. **Dispatch ONE `ralph-synthesizer` in approach mode to read the `*.findings.md` and serialize `.build/<task>/approach.md`** per its definition — a self-contained brief complete enough that the builder implements *from this file alone*, plus the already-done verdict in its return line (`done STATUS=<already-done|needs-work> .build/<task>/approach.md`). Request 'ultrathink' for hard reasoning. Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
 
 **Already-implemented check (orchestrator, from the return line).** If the synthesizer reports `STATUS=already-done`, do NOT implement — skip to Phase 5, mark the item done in `@TODO.md`, and commit that update (one thing per loop). Otherwise continue to Phase 3.
 
-**3 — Implement & test (single `ralph-builder`, serialized).** Dispatch = the chosen task with its required tests + its `specs/*.md` path + `.build/<task>/approach.md` (the self-contained brief it implements from) + its `.build/<task>/build.{md,log}` output paths + the section headings and return string below (the goal/constraints come from `@CLAUDE.md`). Pass the `*.findings.md` paths only as optional reference — `approach.md` is authoritative. It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
+**3 — Implement & test (single `ralph-builder`, serialized).** Dispatch = the chosen task with its required tests + its `specs/*.md` path + `.build/<task>/approach.md` (the self-contained brief it implements from) + its `.build/<task>/build.{md,log}` output paths. (The builder's `build.md` contract lives in its definition.) Pass the `*.findings.md` paths only as optional reference — `approach.md` is authoritative. It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
 
-Sections for `.build/<task>/build.md` (use exactly these):
-```
-# <task>
-## Result        (PASS or FAIL)
-## Tests run     (names + pass/fail each; required tests from the task definition)
-## Failures      (each: test → ≤8-line error excerpt → suspected file:line. Empty if PASS)
-## Changes       (file:line list of what was implemented; no code blocks)
-## Notes         (anything the orchestrator must know; proposed @TODO.md deltas)
-```
-Return string: `PASS|FAIL FAILS=<n> <path>`.
-
-**4 — Reduce & iterate (orchestrator).** Read `.build/<task>/build.md` (read `build.log` only if insufficient). If FAIL: decide the fix; for non-trivial debugging dispatch a `ralph-synthesizer` (request 'ultrathink'), its prompt = the failing `build.md` + relevant `*.findings.md` (goal/constraints come from `@CLAUDE.md`), writing a fix plan to `.build/<task>/fix.md` (it replies one line: `done .build/<task>/fix.md`); then re-dispatch the single `ralph-builder` with `fix.md`. Repeat until PASS. All required tests must exist and pass. Do NOT fix unrelated pre-existing failures inline — record them as `@TODO.md` deltas for a future loop (one thing per loop).
+**4 — Reduce & iterate (orchestrator).** Read `.build/<task>/build.md` (read `build.log` only if insufficient). If FAIL: decide the fix; for non-trivial debugging dispatch a `ralph-synthesizer` in fix mode (request 'ultrathink') with the failing `build.md` + relevant `*.findings.md`, writing a fix plan to `.build/<task>/fix.md` per its definition (it replies `done .build/<task>/fix.md`); then re-dispatch the single `ralph-builder` with `fix.md`. Repeat until PASS. All required tests must exist and pass. Do NOT fix unrelated pre-existing failures inline — record them as `@TODO.md` deltas for a future loop (one thing per loop).
 
 **5 — Update `@TODO.md` & commit (orchestrator only).** When tests pass, remove the resolved item from `@TODO.md` and fold in learnings/new issues from the `.build/<task>/` summaries. Any new item you add MUST use the same item schema (one-line task + `spec:` + `tests:`); if a new issue has no spec yet, record that authoring the spec is part of its scope. Then `git add -A` (code + `@TODO.md`), `git commit` with a message describing the code changes, and `git push`. `.build/` is gitignored — never force-add it.
 

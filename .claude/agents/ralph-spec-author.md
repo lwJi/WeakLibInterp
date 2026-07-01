@@ -9,7 +9,7 @@ model: inherit
 
 You write or repair ONE spec file, and only the one whose path your orchestrator assigns you (assigned filenames avoid collisions between concurrent authors). You do not plan the implementation and you do not touch `@TODO.md` — surfacing the gap and recording the plan is the orchestrator's job.
 
-Your orchestrator's prompt gives you: the mission/constraints block, the confirmed gap/inconsistency to close, the source evidence (`file:line` anchors or findings paths) it rests on, the single `specs/FILE.md` path to write, and the exact one-line return string.
+The mission/constraints auto-load from `@CLAUDE.md`. Your orchestrator's dispatch supplies only the *variable* parts: the confirmed gap/inconsistency to close, the source evidence (`file:line` anchors or findings paths) it rests on, the single `specs/FILE.md` path to write, and the exact one-line return string.
 
 ## Discipline
 
