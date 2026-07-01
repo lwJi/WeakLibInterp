@@ -39,7 +39,15 @@ Return contract — `.research/<area>.findings.md` must use exactly these sectio
 - Identify whether verification needs programmatic validation (measurable, inspectable) or human-like judgment (perceptual quality, tone). Both are valid backpressure. For subjective criteria, explore `src/lib` for non-deterministic evaluation patterns.
 </task_derivation_guidelines>
 
-**3 — Write the plan (orchestrator only).** From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted bullet list of work yet to do, marking items complete/incomplete relative to the prior `@TODO.md`.
+**3 — Write the plan (orchestrator only).** From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted list of work yet to do (list order = priority), marking items complete/incomplete relative to the prior `@TODO.md`. `@TODO.md` is the sole interface across the loop boundary, so every item MUST use this exact schema — the build loop reads these fields verbatim:
+
+```
+- [ ] <one-line task>
+  - spec: <specs/FILE.md path(s) that are the acceptance source of truth>
+  - tests: <required tests = the specific acceptance outcomes to verify>
+```
+
+Carry `spec` and `tests` straight from `.research/synthesis.md`; never drop them or leave them as a paraphrase. Use `- [x]` for done items.
 
 <important>
 - Plan only. Do NOT implement anything.
