@@ -18,7 +18,7 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
 1. **Fan-out research (parallel `ralph-researcher`)**:
     - Launch all slice agents in ONE message.
     - Each dispatch = **plan mode** + its slice (which files/dirs) + its `.research/<area>.findings.md` output path.
-    - Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for `TODO`, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
+    - Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for TODO, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
 
 2. **Synthesize (orchestrator schedules `ralph-synthesizer`, 'ultrathink')**:
     - Wait for ALL Phase 1 agents.

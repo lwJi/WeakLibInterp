@@ -53,7 +53,7 @@ MUST: One thing per loop. A regression your own change introduces must be fixed;
 MUST: Orchestrator is the sole writer of `@TODO.md` and the sole committer.
 
 SHOULD: Keep `@TODO.md` current with learnings; periodically prune completed items.
-SHOULD: Keep `@CLAUDE.md` operational only (commands, how-to-run) — status/progress belong in `@TODO.md`. When you learn how to build/run/test something, the orchestrator itself updates `@CLAUDE.md` briefly (you already own the pen and the commit) so the next iteration inherits the command instead of rediscovering it.
+SHOULD: Keep `@CLAUDE.md` operational only (commands, how-to-run) — status/progress belong in `@TODO.md`. When the builder's `build.md` `## Notes` reports a build/test command it established or corrected (or you otherwise learn how to build/run/test), the orchestrator itself folds that exact invocation into `@CLAUDE.md`'s **Build & run** section in Phase 5 — replacing the `_not yet established_` placeholders (you already own the pen and the commit) so the next iteration inherits the command instead of rediscovering it.
 SHOULD: When documenting, capture the why — why the tests and the implementation matter.
 SHOULD: For spec inconsistencies, dispatch a `ralph-spec-author` (request 'ultrathink') that writes only the spec file.
 
