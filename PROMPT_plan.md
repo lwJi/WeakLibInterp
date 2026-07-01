@@ -21,9 +21,8 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
     - Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for TODO, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
 
 2. **Synthesize (orchestrator schedules `ralph-synthesizer`, 'ultrathink')**:
-    - Wait for ALL Phase 1 agents.
-    - Use the return-line triage counts (highest GAPS/TASKS first) to point the synthesizer at the findings in priority order.
-    - Dispatch ONE `ralph-synthesizer` in synthesis mode (request 'ultrathink') to read all `.research/*.findings.md` and serialize `.research/synthesis.md` per its definition's synthesis contract.
+    - Wait for ALL Phase 1 agents (each returns `done <path>`).
+    - Dispatch ONE `ralph-synthesizer` in synthesis mode (request 'ultrathink') to read all `.research/*.findings.md` and serialize `.research/synthesis.md` per its definition's synthesis contract; it judges priority across the findings.
     - Read ONLY that short file to write the plan; keep the raw findings out of your window.
 
 3. **Write the plan (orchestrator only)**:

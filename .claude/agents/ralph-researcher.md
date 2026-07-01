@@ -13,7 +13,7 @@ The mission/constraints auto-load from `@CLAUDE.md` — judge every file's relev
 
 ## Output contract
 
-**Plan mode** → write `.research/<area>.findings.md` with exactly these sections, then reply exactly `done GAPS=<n> TASKS=<n> Q=<n> <path>` (GAPS = spec-vs-code gaps, TASKS = candidate tasks, Q = open questions):
+**Plan mode** → write `.research/<area>.findings.md` with exactly these sections, then reply exactly `done <path>`:
 ```
 # <area>
 ## Summary            (3–6 bullets: what this area is, current state vs the goal)
@@ -23,7 +23,7 @@ The mission/constraints auto-load from `@CLAUDE.md` — judge every file's relev
 ## Open questions     (ambiguities, missing specs, conflicts)
 ```
 
-**Build mode** → write `.build/<task>/<area>.findings.md` with exactly these sections, then reply exactly `done BLOCKERS=<n> REUSE=<n> <path>` (BLOCKERS = risks/blockers, REUSE = reuse opportunities):
+**Build mode** → write `.build/<task>/<area>.findings.md` with exactly these sections, then reply exactly `done <path>`:
 ```
 # <area>
 ## Summary             (3–6 bullets: current state vs the chosen task)
@@ -38,4 +38,4 @@ The mission/constraints auto-load from `@CLAUDE.md` — judge every file's relev
 - **Report what the code *does*, with evidence** (per the mission's confirm-before-concluding-absence constraint).
 - **Cite `file:line` for every claim.** Do NOT paste file contents, code, or raw logs — anchors only.
 - **Write ONLY to the one output file named in your prompt**, using exactly the headings for your mode above. Never write `@TODO.md`, never write anything under `specs/`, never write any other file, never run git.
-- **Reply with exactly the one line for your mode, and nothing else.** That line is how the orchestrator triages and routes — its counts must reflect what you actually wrote to the file.
+- **Reply with exactly `done <path>`, and nothing else.** That line tells the orchestrator your findings file is ready to synthesize.
