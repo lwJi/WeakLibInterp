@@ -8,22 +8,37 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
 
 ## Phases
 
-**0 — Inventory & partition (orchestrator).** Enumerate `specs/*`, `src/*`, `src/lib/*` (Glob/LS). Read the current `@TODO.md` (treat as possibly stale) to seed the starting point. Partition the codebase into **disjoint, gapless slices** — no two agents study the same thing. **Recreate `.research/` empty each run** (`rm -rf .research && mkdir .research`) so no orphan findings from a prior, differently-sliced run survive to pollute synthesis. Name each slice's output `.research/<area>.findings.md`, where `<area>` is a unique kebab-case slug (no two slices collide).
+0. **Inventory & partition (orchestrator)**:
+    - Enumerate `specs/*`, `src/*`, `src/lib/*` (Glob/LS).
+    - Read the current `@TODO.md` (treat as possibly stale) to seed the starting point.
+    - Partition the codebase into **disjoint, gapless slices** — no two agents study the same thing.
+    - **Recreate `.research/` empty** (`rm -rf .research && mkdir .research`) so no orphan findings from a prior, differently-sliced run survive to pollute synthesis.
+    - Name each slice's output `.research/<area>.findings.md`, where `<area>` is a unique kebab-case slug (no two slices collide).
 
-**1 — Fan-out research (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = **plan mode** + its slice (which files/dirs) + its `.research/<area>.findings.md` output path. Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for `TODO`, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
+1. **Fan-out research (parallel `ralph-researcher`)**:
+    - Launch all slice agents in ONE message.
+    - Each dispatch = **plan mode** + its slice (which files/dirs) + its `.research/<area>.findings.md` output path.
+    - Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for `TODO`, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
 
-**2 — Synthesize (orchestrator schedules `ralph-synthesizer`, 'ultrathink').** Wait for ALL Phase 1 agents. Use the return-line triage counts (highest GAPS/TASKS first) to point the synthesizer at the findings in priority order. **Dispatch ONE `ralph-synthesizer` in synthesis mode (request 'ultrathink') to read all `.research/*.findings.md` and serialize `.research/synthesis.md`** per its definition's synthesis contract. Read ONLY that short file to write the plan; keep the raw findings out of your window.
+2. **Synthesize (orchestrator schedules `ralph-synthesizer`, 'ultrathink')**:
+    - Wait for ALL Phase 1 agents.
+    - Use the return-line triage counts (highest GAPS/TASKS first) to point the synthesizer at the findings in priority order.
+    - Dispatch ONE `ralph-synthesizer` in synthesis mode (request 'ultrathink') to read all `.research/*.findings.md` and serialize `.research/synthesis.md` per its definition's synthesis contract.
+    - Read ONLY that short file to write the plan; keep the raw findings out of your window.
 
-**3 — Write the plan (orchestrator only).** From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted list of work yet to do (list order = priority), marking items complete/incomplete relative to the prior `@TODO.md`. `@TODO.md` is the sole interface across the loop boundary, so every item MUST use this exact schema — the build loop reads these fields verbatim:
+3. **Write the plan (orchestrator only)**:
+    - From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted list of work yet to do (list order = priority).
+    - Mark items complete/incomplete relative to the prior `@TODO.md` (`- [x]` for done items).
+    - `@TODO.md` is the sole interface across the loop boundary, so every item MUST use this exact schema — the build loop reads these fields verbatim:
 
-```
-- [ ] <one-line task>
-  - spec: <specs/FILE.md path(s) that are the acceptance source of truth>
-  - tests: <required tests = the specific acceptance outcomes to verify>
-  - notes: <optional; carry-forward reasoning/progress/why for in-flight or retried items — omit when empty>
-```
+    ```
+    - [ ] <one-line task>
+      - spec: <specs/FILE.md path(s) that are the acceptance source of truth>
+      - tests: <required tests = the specific acceptance outcomes to verify>
+      - notes: <optional; carry-forward reasoning/progress/why for in-flight or retried items — omit when empty>
+    ```
 
-Carry `spec` and `tests` straight from `.research/synthesis.md`; never drop them or leave them as a paraphrase. Use `- [x]` for done items.
+    - Carry `spec` and `tests` straight from `.research/synthesis.md`; never drop them or leave them as a paraphrase.
 
 <important>
 - Plan only. Do NOT implement anything.

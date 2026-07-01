@@ -9,19 +9,43 @@ You are the orchestrator for implementing functionality per the specs, using pin
 
 ## Phases
 
-**0 — Orient (orchestrator).** Read `@TODO.md` and choose the most important item (top of the priority-sorted list) — that ONE item is the whole increment. Each item follows a fixed schema: a one-line task, a `spec:` field, a `tests:` field (the required tests, part of scope), and an optional `notes:` field — carry-forward reasoning from a prior loop; read it to resume where the last iteration left off instead of rediscovering it. Take the `spec:` path as the acceptance source of truth — that spec, not the TODO one-liner, governs — and take `tests:` as the required tests to make exist and pass. Pick a short `<task>` slug; all artifacts live under `.build/<task>/`. **Recreate `.build/` empty each iteration** (`rm -rf .build && mkdir .build`) so no stale artifacts from a prior loop survive to mislead you — `@TODO.md` is the only state carried between loops. Decide what must be confirmed in code, and partition it into disjoint, gapless slices.
+0. **Orient (orchestrator)**:
+    - Read `@TODO.md`; pick the most important item (top of the priority-sorted list) — that ONE item is the whole increment.
+    - Read its fixed-schema fields — a one-line task, `spec:`, `tests:`, and an optional `notes:` (carry-forward reasoning from a prior loop); resume from `notes:` instead of rediscovering.
+    - The `spec:` path is the acceptance source of truth — that spec, not the TODO one-liner, governs; `tests:` are the required tests to make exist and pass.
+    - Pick a short `<task>` slug; all artifacts live under `.build/<task>/`.
+    - **Recreate `.build/` empty** (`rm -rf .build && mkdir .build`) so no stale artifacts mislead you — `@TODO.md` is the only state carried between loops.
+    - Decide what must be confirmed in code; partition it into disjoint, gapless slices.
 
-**1 — Fan-out search (parallel `ralph-researcher`).** Launch all slice agents in one message. Each dispatch = **build mode** + the chosen task and its `specs/*.md` path (so it can judge relevance against the acceptance source of truth) + its slice (which files/dirs to confirm) + its `.build/<task>/<area>.findings.md` output path (`<area>` = unique kebab-case slug). Purpose: confirm current state before implementing.
+1. **Fan-out search (parallel `ralph-researcher`)**:
+    - Launch all slice agents in ONE message.
+    - Each dispatch = **build mode** + the chosen task and its `specs/*.md` path (to judge relevance against the acceptance source of truth) + its slice (which files/dirs to confirm) + its `.build/<task>/<area>.findings.md` output path (`<area>` = unique kebab-case slug).
+    - Purpose: confirm current state before implementing.
 
-**2 — Decide approach (orchestrator schedules `ralph-synthesizer`).** After ALL Phase 1 agents return, use the return-line triage counts (highest BLOCKERS first) to point the synthesizer at the findings in priority order. **Dispatch ONE `ralph-synthesizer` in approach mode to read the `*.findings.md` and serialize `.build/<task>/approach.md`** per its definition; its return line carries the already-done verdict you route on (`STATUS=already-done|needs-work`). Request 'ultrathink' for hard reasoning. Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
+2. **Decide approach (orchestrator schedules `ralph-synthesizer`)**:
+    - Wait for ALL Phase 1 agents to return.
+    - Use the return-line triage counts (highest BLOCKERS first) to point the synthesizer at the findings in priority order.
+    - Dispatch ONE `ralph-synthesizer` in approach mode to read the `*.findings.md` and serialize `.build/<task>/approach.md` per its definition (request 'ultrathink' for hard reasoning).
+    - Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
+    - Route on its return line `STATUS=already-done|needs-work`: if `already-done`, do NOT implement — skip to Phase 5, mark the item done in `@TODO.md`, and commit that update (one thing per loop); otherwise continue to Phase 3.
 
-**Already-implemented check (orchestrator, from the return line).** If the synthesizer reports `STATUS=already-done`, do NOT implement — skip to Phase 5, mark the item done in `@TODO.md`, and commit that update (one thing per loop). Otherwise continue to Phase 3.
+3. **Implement & test (single `ralph-builder`, serialized)**:
+    - Dispatch = the chosen task with its required tests + its `specs/*.md` path + `.build/<task>/approach.md` (the self-contained brief it implements from) + its `.build/<task>/build.{md,log}` output paths.
+    - Pass the `*.findings.md` paths only as optional reference — `approach.md` is authoritative.
+    - It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
 
-**3 — Implement & test (single `ralph-builder`, serialized).** Dispatch = the chosen task with its required tests + its `specs/*.md` path + `.build/<task>/approach.md` (the self-contained brief it implements from) + its `.build/<task>/build.{md,log}` output paths. Pass the `*.findings.md` paths only as optional reference — `approach.md` is authoritative. It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
+4. **Reduce & iterate (orchestrator)**:
+    - Read `.build/<task>/build.md` (read `build.log` only if insufficient).
+    - If FAIL and non-trivial to debug: dispatch a `ralph-synthesizer` in fix mode (request 'ultrathink') with the failing `build.md` + relevant `*.findings.md`, writing a fix plan to `.build/<task>/fix.md` per its definition.
+    - Re-dispatch the single `ralph-builder` with `fix.md`; repeat until PASS.
+    - **Cap at ~3 builder attempts**: if it still FAILs, stop — do NOT commit partial code — end the iteration, leaving the item incomplete in `@TODO.md` with a `notes:` line capturing what was tried, the suspected cause, and the next thing to try (so the next loop resumes from that reasoning and the orchestrator window stays bounded).
+    - All required tests must exist and pass before an item is marked done.
+    - Do NOT fix unrelated pre-existing failures inline — record them as `@TODO.md` deltas for a future loop (one thing per loop).
 
-**4 — Reduce & iterate (orchestrator).** Read `.build/<task>/build.md` (read `build.log` only if insufficient). If FAIL: decide the fix; for non-trivial debugging dispatch a `ralph-synthesizer` in fix mode (request 'ultrathink') with the failing `build.md` + relevant `*.findings.md`, writing a fix plan to `.build/<task>/fix.md` per its definition; then re-dispatch the single `ralph-builder` with `fix.md`. Repeat until PASS, but **cap at ~3 builder attempts**: if it still FAILs, stop — do NOT commit partial code — and end the iteration, leaving the item incomplete in `@TODO.md` with a `notes:` line capturing what was tried, the suspected cause, and the next thing to try (so the next loop resumes from that reasoning instead of rediscovering it, and the orchestrator window stays bounded). All required tests must exist and pass before an item is marked done. Do NOT fix unrelated pre-existing failures inline — record them as `@TODO.md` deltas for a future loop (one thing per loop).
-
-**5 — Update `@TODO.md` & commit (orchestrator only).** When tests pass, remove the resolved item from `@TODO.md` and fold in learnings/new issues from the `.build/<task>/` summaries. Any new item you add MUST use the same item schema (one-line task + `spec:` + `tests:`, plus an optional `notes:` for carry-forward reasoning); if a new issue has no spec yet, record that authoring the spec is part of its scope. Then `git add -A` (code + `@TODO.md`), `git commit` with a message describing the code changes, and `git push`. `.build/` is gitignored — never force-add it.
+5. **Update `@TODO.md` & commit (orchestrator only)**:
+    - When tests pass, remove the resolved item from `@TODO.md` and fold in learnings/new issues from the `.build/<task>/` summaries.
+    - Any new item you add MUST use the same item schema (one-line task + `spec:` + `tests:`, plus an optional `notes:` for carry-forward reasoning); if a new issue has no spec yet, record that authoring the spec is part of its scope.
+    - `git add -A` (code + `@TODO.md`), `git commit` with a message describing the code changes, and `git push`. `.build/` is gitignored — never force-add it.
 
 <rules>
 MUST: Required tests (derived from the spec's acceptance criteria) exist and pass before committing — written first or alongside implementation. Cover behavior/performance/correctness, and perceptual-quality tests for subjective criteria (see `src/lib` patterns).
