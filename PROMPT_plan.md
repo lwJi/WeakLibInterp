@@ -32,14 +32,14 @@ Return contract — `.research/<area>.findings.md` must use exactly these sectio
 ## Open questions     (ambiguities, missing specs, conflicts)
 ```
 
-**2 — Reduce & synthesize (orchestrator).** Wait for ALL Phase 1 agents. Use the return-line triage counts to order your reads (highest GAPS/TASKS first). Read the `.research/*.findings.md` files; because they share one contract, merge section-by-section. Connect findings across slices (cross-component dependencies, `src/lib` consolidation, duplicated gaps) and prioritize. Ultrathink.
+**2 — Synthesize (orchestrator schedules a synthesizer).** Wait for ALL Phase 1 agents. Use the return-line triage counts (highest GAPS/TASKS first) to point the synthesizer at the findings in priority order. **Dispatch ONE Opus subagent ('ultrathink') to read all `.research/*.findings.md` and serialize a distilled synthesis** to `.research/synthesis.md` — priority-ordered candidate tasks (each marked new/partial/missing, with its required tests and cross-slice links: dependencies, `src/lib` consolidation, duplicated gaps), open questions, and any genuinely-missing specs to author. Paste `<task_derivation_guidelines>` (below) into its prompt so it derives the required tests per task. It replies one line: `done TASKS=<n> Q=<n> .research/synthesis.md`. Read ONLY that short file to write the plan; keep the raw findings out of your window.
 
 <task_derivation_guidelines>
 - For each task, derive required tests from the acceptance criteria in `specs/*` — the specific outcomes needing verification (behavior, performance, edge cases). Include the tests in the task definition. Tests verify WHAT works, not HOW.
 - Identify whether verification needs programmatic validation (measurable, inspectable) or human-like judgment (perceptual quality, tone). Both are valid backpressure. For subjective criteria, explore `src/lib` for non-deterministic evaluation patterns.
 </task_derivation_guidelines>
 
-**3 — Write the plan (orchestrator only).** Create/update `@TODO.md` as a priority-sorted bullet list of work yet to do, marking items complete/incomplete relative to the prior `@TODO.md`.
+**3 — Write the plan (orchestrator only).** From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted bullet list of work yet to do, marking items complete/incomplete relative to the prior `@TODO.md`.
 
 <important>
 - Plan only. Do NOT implement anything.
