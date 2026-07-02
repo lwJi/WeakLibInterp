@@ -25,14 +25,14 @@ You are the orchestrator for implementing functionality per the specs, using pin
 
 2. **Decide approach (orchestrator schedules `ralph-synthesizer`)**:
     - Wait for ALL Phase 1 agents to return (each returns `done <path>`).
-    - Dispatch ONE `ralph-synthesizer` in approach mode with the chosen item's one-line task, its `spec:` path, and its `tests:` field, plus the `*.findings.md` paths to read; it serializes `.build/<task>/approach.md` per its definition (request 'ultrathink' for hard reasoning) and judges priority across the findings.
-    - Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window.
-    - Route on its return line `STATUS=already-done|needs-work`: if `already-done`, do NOT implement — skip to Phase 5, check the item's box to `- [x]` in place in `@TODO.md` (do NOT remove it), and commit that update (one thing per loop); otherwise continue to Phase 3.
+    - Dispatch ONE `ralph-synthesizer` in approach mode with the chosen item's one-line task, its `spec:` path, and its `tests:` field, plus the `*.findings.md` paths to read; it serializes `.build/<task>/approach.md` per its definition (request 'ultrathink' for hard reasoning) and judges priority across the findings. If it judges the increment may already be satisfied, it says so in the brief so the builder confirms empirically (by running the required tests) instead of reimplementing.
+    - Read only the short `approach.md` to confirm the plan; keep the raw findings out of your window, then continue to Phase 3. There is no static already-done short-circuit: whether an item is already done is decided by the builder actually running its tests (Phase 4), since the builder is the sole validator.
 
 3. **Implement & test (single `ralph-builder`, serialized)**:
     - Dispatch = the chosen task with its required tests + its `specs/*.md` path + `.build/<task>/approach.md` (the self-contained brief it implements from) + its `.build/<task>/build.{md,log}` output paths.
     - Pass the `*.findings.md` paths only as optional reference — `approach.md` is authoritative.
     - It implements the functionality AND the required tests, runs all required tests, writes full output to `build.log` and the distilled `build.md`, then returns one line.
+    - Already-done case: if the required tests already exist and pass unchanged, the builder makes no code changes and returns `PASS` with `## Changes: none` — that is how already-done is confirmed empirically (no separate route).
 
 4. **Reduce & iterate (orchestrator)**:
     - Read `.build/<task>/build.md` — never `build.log`; raw logs stay out of your window (the fix-mode synthesizer reads them).
@@ -43,7 +43,7 @@ You are the orchestrator for implementing functionality per the specs, using pin
     - Do NOT fix unrelated pre-existing failures inline — record them as `@TODO.md` deltas for a future loop (one thing per loop).
 
 5. **Update `@TODO.md` & commit (orchestrator only)**:
-    - When tests pass, check the resolved item's box to `- [x]` in place — do NOT remove it — and fold its learnings into that item's `notes:`; surface any new issues as new `- [ ]` items. Completed `- [x]` items stay in `@TODO.md` until the plan loop prunes them by recreating the file.
+    - When tests pass, check the resolved item's box to `- [x]` in place — do NOT remove it — and fold its learnings into that item's `notes:`; surface any new issues as new `- [ ]` items. This includes the already-done case (builder returned `PASS` with no changes): the tests passing empirically confirms it, so tick the box; the commit then carries only the `@TODO.md` update. Completed `- [x]` items stay in `@TODO.md` until the plan loop prunes them by recreating the file.
     - Any new item you add MUST use the same item schema (one-line task + `spec:` + `tests:`, plus an optional `notes:` for carry-forward reasoning); if a new issue has no spec yet, record that authoring the spec is part of its scope.
     - `git add -A` (code + `@TODO.md`), `git commit` with a message describing the code changes, and `git push`. `.build/` is gitignored — never force-add it.
 

@@ -22,7 +22,7 @@ The mission/constraints auto-load from `@CLAUDE.md`. Your orchestrator's dispatc
 </task_derivation_guidelines>
 ```
 
-**Approach mode** (build loop) → write `.build/<task>/approach.md`: a self-contained brief (≤10 bullets: what to implement, in which files, which `src/lib` to reuse, which tests to write, known risks) complete enough that the builder implements *from this file alone*. Also judge whether the increment already exists with its required tests passing. Reply exactly `done STATUS=<already-done|needs-work> .build/<task>/approach.md`.
+**Approach mode** (build loop) → write `.build/<task>/approach.md`: a self-contained brief (≤10 bullets: what to implement, in which files, which `src/lib` to reuse, which tests to write, known risks) complete enough that the builder implements *from this file alone*. If the evidence suggests the increment may already be satisfied, say so in the brief and point at where — the builder confirms it empirically by running the required tests (you cannot run tests, so you never rule the increment done yourself). Reply exactly `done .build/<task>/approach.md`.
 
 **Fix mode** (build loop retry) → write `.build/<task>/fix.md`: a concrete fix plan derived from the failing `build.md`/`build.log`, the original `approach.md`, and relevant `*.findings.md` — restate enough of the approach that the builder can retry from this file alone. Reply exactly `done .build/<task>/fix.md`.
 

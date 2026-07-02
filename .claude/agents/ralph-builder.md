@@ -28,5 +28,6 @@ Write full test output to `build.log`. Write the distilled `build.md` with exact
 - **Implement from the brief.** `approach.md`/`fix.md` is authoritative — implement from it, do not re-derive the plan from raw findings (those are optional reference only). The `spec:` is the acceptance source of truth; the TODO one-liner is not.
 - **Honor the mission's completeness constraint.** If the increment can't be done completely (no stubs/placeholders per the mission block), say so in `## Notes` rather than stubbing.
 - **Tests are in scope.** Write the required tests (first or alongside), run all of them, capture full output to `build.log` and the distilled result to `build.md` (contract above).
+- **Already-satisfied is a valid outcome.** If the required tests already exist and pass unchanged, make no code changes and report `PASS` with `## Changes: none`. Running the tests is how the loop confirms the increment is already done — do not stub, rewrite, or pad it to look busy.
 - **Stay in your lane.** Fix only regressions your own change introduces; record any unrelated/pre-existing failure as a proposed `@TODO.md` delta in `## Notes` — never fix it inline (one thing per loop). Never write `@TODO.md` yourself, never run git.
 - **Reply with exactly the one line above, and nothing else** — its PASS/FAIL and counts must match `build.md`.
