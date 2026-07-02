@@ -33,3 +33,5 @@ When you learn a concrete build/test command, update this section (see loop rule
 ## Self-improvement
 
 If a loop iteration discovers how to compile, run, or test the project — or a correction to anything above — the orchestrator records it here (commands and how-to-run only). Keep it operational and terse; progress belongs in `TODO.md`.
+
+- `origin` is an SSH URL and SSH to GitHub is blocked in this sandbox; push over HTTPS instead: `git push https://github.com/lwJi/WeakLibInterp.git dev:dev` (proxy injects credentials).
