@@ -39,3 +39,11 @@ add_executable(test_table_residency test_table_residency.cpp)
 target_link_libraries(test_table_residency PRIVATE wli_lib)
 
 add_test(NAME table_residency COMMAND test_table_residency)
+
+# EOS single-point evaluate kernel (src/lib/wli_eos.H). Header-only, so links
+# only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_eos_point test_eos_point.cpp)
+
+target_link_libraries(test_eos_point PRIVATE wli_lib)
+
+add_test(NAME eos_point COMMAND test_eos_point)

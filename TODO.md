@@ -37,10 +37,10 @@ Greenfield: no `src/`, no `test/`, no build system exists in the tracked tree ye
 
 ## Tier 1 — EOS interpolation & inversion
 
-- [ ] EOS single-point evaluate `_Point` (trilinear-in-log)
+- [x] EOS single-point evaluate `_Point` (trilinear-in-log)
   - spec: eos-interpolation.md — acceptance source of truth
   - tests: affine-in-log exactness `~1e-14`; node identity; boundary extrapolation (clamp index not delta); NaN propagation; production-table parity vs oracle `rtol=1e-12,atol=1e-30` (deferred to the regression-suite production cells).
-  - notes: Trilinear-in-log with **ρ,T log axes, Yₑ linear**, one dependent variable at a time; table `t[iD + nD*(iT + nT*iY)]`. Oracle `LogInterpolateSingleVariable_3D_Custom_Point` (`wlInterpolationModule.F90:1640-1707`) → `LinearInterp3D_3DArray_Point` (`wlInterpolationUtilitiesModule.F90:630-660`). Reuses the flat-index helper + math core. First full end-to-end path.
+  - notes: DONE — ctest `eos_point` green (affine-in-log interior ~1e-14; node identity interior + top-edge iD=nD-1; boundary extrapolation below/above both ρ and T edges exact under affine-in-log; NaN on ρ≤0 and T≤0); full suite 5/5. Landed `src/lib/wli_eos.H`: `wli::EosInterpolateSingleVariable3DPoint(D,T,Y, Ds,nD, Ts,nT, Ys,nY, OS, table)` — inputs are RAW physical values (kernel takes log10 internally on ρ,T; Yₑ raw), composes `GetIndexAndDeltaLog/Lin` + 8-corner gather via `flat_index<3>` (ρ = axis 0 = dX1 fastest) + `TriLinear` + `recover`; `AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE noexcept`, allocation-free, no guards. Header-only, flat in `src/lib`, no CMake change beyond `test/CMakeLists.txt` registration (`test/test_eos_point.cpp`, synthetic table nD=4,nT=3,nY=3, OS=3.5, no HDF5). Oracle `LogInterpolateSingleVariable_3D_Custom_Point` (`wlInterpolationModule.F90:1640-1707`) → `LinearInterp3D_3DArray_Point` (`wlInterpolationUtilitiesModule.F90:630-660`). The differentiate increment should reuse this corner gather + `dTriLineardX*`; production `.h5` parity stays with the regression-suite umbrella (as scoped).
 
 - [ ] EOS evaluate-and-differentiate `_Point`
   - spec: eos-interpolation.md — acceptance source of truth
