@@ -15,7 +15,7 @@ This file auto-loads in every session (orchestrator and every subagent). It carr
 
 - `specs/*` — acceptance source of truth (WHAT must hold). `specs/tools/`, `specs/fixtures/`.
 - `src/*` — implementation; `src/lib/*` is the shared standard library. *(Not created yet — greenfield.)*
-- `TODO.md` — the durable, priority-sorted plan; the only state carried between loop iterations.
+- `TODO.md` — the durable, priority-sorted plan; the only state carried between loop iterations. Completed items are marked `- [x]` in place by the build loop (never removed); they are pruned only when the plan loop recreates the file.
 - Sibling repos (read-only sources of truth): `../amrex` (device interface), `../weaklib` and `../thornado` (Fortran behavior being reimplemented).
 
 ## Build & run

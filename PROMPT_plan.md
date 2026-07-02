@@ -26,8 +26,8 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
     - Read ONLY that short file to write the plan; keep the raw findings out of your window.
 
 3. **Write the plan (orchestrator only)**:
-    - From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted list of work yet to do (list order = priority).
-    - Mark items complete/incomplete relative to the prior `@TODO.md` (`- [x]` for done items).
+    - From `.research/synthesis.md`, write `@TODO.md` fresh as a priority-sorted list of the work yet to do (list order = priority) — a full re-author each run, not an in-place edit.
+    - Recreation is the prune point: items already complete (marked `- [x]` in the prior `@TODO.md`, or confirmed done in code by synthesis) are dropped, not carried forward — the fresh list holds only remaining `- [ ]` work. This is the ONLY place completed items are pruned; between plan runs the build loop only marks them `- [x]`, never removes them.
     - `@TODO.md` MUST use this exact top-level skeleton and introduce NO other top-level (`##`) sections — this keeps the document's shape stable across runs:
 
     ```
