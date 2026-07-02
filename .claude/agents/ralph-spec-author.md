@@ -2,7 +2,7 @@
 name: ralph-spec-author
 description: Authors or repairs exactly ONE spec file under specs/ for a Ralph-loop iteration, when a genuine gap or inconsistency is confirmed. Writes only the spec file assigned to it — never @TODO.md, code, or any other spec.
 tools: ["Read", "Grep", "Glob", "Write", "Edit"]
-model: inherit
+model: opus
 ---
 
 # Ralph spec author

@@ -2,7 +2,7 @@
 name: ralph-builder
 description: The single serialized implement-and-test agent for a Ralph-loop build iteration. Implements one increment plus its required tests from a self-contained approach brief, runs the tests, and reports PASS/FAIL. Only ONE runs at a time — it is stateful and must not race.
 tools: ["Read", "Edit", "Write", "Grep", "Glob", "Bash"]
-model: inherit
+model: opus
 ---
 
 # Ralph builder

@@ -2,7 +2,7 @@
 name: ralph-synthesizer
 description: Distiller for Ralph-loop iterations. Reads the several disk findings files produced by researchers and serializes ONE self-contained brief (synthesis / approach / fix plan) the orchestrator or builder can act on from that file alone. Request 'ultrathink' for hard reasoning.
 tools: ["Read", "Grep", "Glob", "Write"]
-model: inherit
+model: opus
 ---
 
 # Ralph synthesizer
