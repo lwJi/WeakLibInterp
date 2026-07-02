@@ -15,10 +15,10 @@ Greenfield: no `src/`, no `test/`, no build system exists in the tracked tree ye
 
 ## Tier 0 — Foundations (`src/lib` + build scaffold; blocks everything)
 
-- [ ] Build scaffold + value-type pin — stand up the CPU-only AMReX+HDF5 build with `src/lib/` and `test/` layout
+- [x] Build scaffold + value-type pin — stand up the CPU-only AMReX+HDF5 build with `src/lib/` and `test/` layout
   - spec: build-integration.md — acceptance source of truth
   - tests: (#1) CPU-only build of library + suite targets succeeds against `../amrex`; (#2) no Fortran/Matlab in toolchain (C++/HDF5-C++ only); (#4) AMReX source resolves from the sibling checkout; (#5) `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh` passes; `static_assert` that the pinned value type is `double` (not `amrex::Real`).
-  - notes: Force `AMReX_GPU_BACKEND=NONE`, `AMReX_PRECISION=DOUBLE`, `AMReX_MPI=OFF`, `AMReX_FORTRAN=OFF` as `CACHE … FORCE` before `add_subdirectory(../amrex)`; C++20 minimum; link HDF5 C++. Provide a value-type header (pinned `double`). Everything else compiles into this. Persist the working build/test command into `CLAUDE.md` "Build & run" once green. Build system + target names are implementation-freedom (specs are silent; CMake / `weaklibinterp` naming is only a non-binding hint from a stale `.build/` cache — re-derive from spec).
+  - notes: DONE — all five checks pass. Landed: top-level `CMakeLists.txt` (C++20, `project(... CXX)`, force-block `AMReX_GPU_BACKEND=NONE`/`AMReX_PRECISION=DOUBLE`/`AMReX_MPI=OFF`/`AMReX_FORTRAN=OFF`/`AMReX_OMP=OFF`/`AMReX_INSTALL=OFF` + solvers/amrlevel/particles/tiny-profile OFF, all `CACHE … FORCE` before `add_subdirectory(../amrex)`); `src/lib/wli_real.H` pins `wli::Real = double` with `static_assert` (never references `amrex::Real`); `wli_lib` static lib PUBLIC-links `AMReX::amrex`; `wli_tests` links `hdf5::hdf5_cpp` (fallback `${HDF5_CXX_LIBRARIES}`); ctest `scaffold` test. Build dir is `build/` (gitignored); `.build/` stays agent scratch. Do NOT enable `AMReX_HDF5` — find HDF5 independently to avoid AMReX's parallel-HDF5 enforcement. Host toolchain was installed via apt (`cmake`, `g++`, `libhdf5-dev` with C++ bindings at `/usr/include/hdf5/serial/H5Cpp.h`); reinstall if the sandbox is reset. Commands recorded in `CLAUDE.md` Build & run.
 
 - [ ] Column-major flat-index helper (1D–5D) in `src/lib`
   - spec: amrex-device-interface.md — acceptance source of truth (§:64-78)

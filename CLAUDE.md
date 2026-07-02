@@ -20,11 +20,13 @@ This file auto-loads in every session (orchestrator and every subagent). It carr
 
 ## Build & run
 
-Greenfield: no C++ build system exists yet. Per `specs/build-integration.md` the target is **AMReX CPU-only, double precision, host execution, no Fortran/Matlab**; the correctness-bearing value type is pinned to `double` regardless of `amrex::Real`. AMReX resolves from `../amrex`.
+Per `specs/build-integration.md` the target is **AMReX CPU-only, double precision, host execution, no Fortran/Matlab**; the correctness-bearing value type is pinned to `double` (`src/lib/wli_real.H`, `wli::Real`) regardless of `amrex::Real`. AMReX resolves from `../amrex` via `add_subdirectory` (override with `-DWLI_AMREX_ROOT=<path>`). Build dir is `build/` (gitignored); `.build/` is agent scratch, never the build dir.
 
 - **Validate specs:** `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh`
-- **Build the library + suite:** _not yet established — fill in when a build system is stood up._
-- **Run the regression suite:** _not yet established — fill in when the suite exists._
+- **Configure:** `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- **Build the library + suite:** `cmake --build build -j4` (cap `-j`; AMReX is large and uncapped builds OOM this host)
+- **Run the regression suite:** `ctest --test-dir build --output-on-failure`
+- Host toolchain prerequisites (apt, reinstall if the sandbox resets): `cmake`, `g++`, `libhdf5-dev` (HDF5 C++ bindings at `/usr/include/hdf5/serial/H5Cpp.h`). Never install Fortran/Matlab. Do not enable `AMReX_HDF5` — HDF5 is found independently.
 
 When you learn a concrete build/test command, update this section (see loop rule below) so the next iteration inherits it instead of rediscovering it.
 
