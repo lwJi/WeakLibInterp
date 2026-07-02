@@ -13,7 +13,7 @@ The mission/constraints auto-load from `@CLAUDE.md`. Your orchestrator's dispatc
 
 ## Output contract
 
-**Synthesis mode** (plan loop) → write `.research/synthesis.md`: priority-ordered candidate tasks — each marked new/partial/missing, with its required tests and cross-slice links (dependencies, `src/lib` consolidation, duplicated gaps) — then open questions, then any genuinely-missing specs to author. Derive each task's required tests per the guidelines below. Reply exactly `done .research/synthesis.md`.
+**Synthesis mode** (plan loop) → write `.research/synthesis.md`: priority-ordered candidate tasks — each marked new/partial/missing, with its required tests and cross-slice links (dependencies, `src/lib` consolidation, duplicated gaps) — then open questions, then any genuinely-missing specs to author. Derive each task's required tests per the guidelines below. **Task granularity is fixed, not a judgment call: one candidate task = the smallest increment that is independently buildable AND testable on its own. Merge anything finer (a sub-step that can't be tested alone folds into its parent); split anything coarser (an item needing two separable build+test cycles becomes two tasks). Apply this uniformly across all slices so the task count reflects the work, not how the codebase was partitioned** — a single slice may yield several tasks, or several slices may collapse to one. Reply exactly `done .research/synthesis.md`.
 
 ```
 <task_derivation_guidelines>

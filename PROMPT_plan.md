@@ -11,14 +11,14 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
 0. **Inventory & partition (orchestrator)**:
     - Enumerate `specs/*`, `src/*`, `src/lib/*` (Glob/LS).
     - Read the current `@TODO.md` (treat as possibly stale) to seed the starting point.
-    - Partition the codebase into **disjoint, gapless slices** — no two agents study the same thing.
+    - Partition along a **fixed axis** so slice count is deterministic, not a per-run judgment call: create exactly ONE slice per acceptance spec under `specs/` (every `specs/*.md` except `README.md`), pairing each with the `src/*` that implements it (if any); plus exactly ONE cross-cutting slice covering `src/lib/*` shared utilities and the repo-wide scan for TODO/placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns. Slice count therefore equals (number of acceptance specs) + 1. Slices stay **disjoint and gapless** — no two agents study the same thing.
     - **Recreate `.research/` empty** (`rm -rf .research && mkdir .research`) so no orphan findings from a prior, differently-sliced run survive to pollute synthesis.
     - Name each slice's output `.research/<area>.findings.md`, where `<area>` is a unique kebab-case slug (no two slices collide).
 
 1. **Fan-out research (parallel `ralph-researcher`)**:
     - Launch all slice agents in ONE message.
     - Each dispatch = **plan mode** + its slice (which files/dirs) + its `.research/<area>.findings.md` output path.
-    - Coverage across slices must include: the `specs/*`; existing `src/*` vs the specs it implements; shared utilities in `src/lib/*`; and a scan for TODO, placeholder/minimal implementations, skipped/flaky tests, and inconsistent patterns.
+    - The fixed-axis partition (Phase 0) already guarantees coverage: every `specs/*` acceptance spec with its implementing `src/*`, the `src/lib/*` shared utilities, and the repo-wide placeholder/skipped-test/inconsistency scan. Each dispatch's slice is either one spec (+ its paired `src/*`) or the single cross-cutting slice — nothing outside that partition.
 
 2. **Synthesize (orchestrator schedules `ralph-synthesizer`, 'ultrathink')**:
     - Wait for ALL Phase 1 agents (each returns `done <path>`).
@@ -28,6 +28,20 @@ You are the orchestrator for creating/updating `@TODO.md`, the durable on-disk p
 3. **Write the plan (orchestrator only)**:
     - From `.research/synthesis.md`, create/update `@TODO.md` as a priority-sorted list of work yet to do (list order = priority).
     - Mark items complete/incomplete relative to the prior `@TODO.md` (`- [x]` for done items).
+    - `@TODO.md` MUST use this exact top-level skeleton and introduce NO other top-level (`##`) sections — this keeps the document's shape stable across runs:
+
+    ```
+    # TODO — <project> build plan
+    <one short intro paragraph: greenfield/current-state framing>
+
+    ## Standing facts every item inherits      (OPTIONAL, at most once; cross-cutting facts every item depends on, as bullets; omit the whole section if there are none)
+
+    ## <Tier/group heading>                     (one or more; hold the priority-sorted task list; list order = priority)
+    - [ ] <task> … (item schema below)
+
+    ## Decisions & non-blocking spec items      (OPTIONAL, at most once; decisions/spec-repair candidates that are NOT themselves build increments)
+    ```
+
     - `@TODO.md` is the sole interface across the loop boundary, so every item MUST use this exact schema — the build loop reads these fields verbatim:
 
     ```
