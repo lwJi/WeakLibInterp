@@ -2,6 +2,7 @@
 .research
 .build
 build/
+.claude/settings.local.json
 
 *.pyc
 .vscode
