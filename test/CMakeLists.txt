@@ -31,3 +31,11 @@ add_executable(test_interp_core test_interp_core.cpp)
 target_link_libraries(test_interp_core PRIVATE wli_lib)
 
 add_test(NAME interp_core COMMAND test_interp_core)
+
+# Device table-residency / upload helper + metadata convention
+# (src/lib/wli_table.H). Header-only, so links only wli_lib; no HDF5 needed.
+add_executable(test_table_residency test_table_residency.cpp)
+
+target_link_libraries(test_table_residency PRIVATE wli_lib)
+
+add_test(NAME table_residency COMMAND test_table_residency)
