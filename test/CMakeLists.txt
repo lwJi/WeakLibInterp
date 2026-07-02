@@ -23,3 +23,11 @@ add_executable(wli_index_tests test_index_roundtrip.cpp)
 target_link_libraries(wli_index_tests PRIVATE wli_lib)
 
 add_test(NAME index_roundtrip COMMAND wli_index_tests)
+
+# Scalar multilinear interpolation core + shared comparator (src/lib/wli_interp.H,
+# src/lib/wli_compare.H). Header-only, so links only wli_lib; no HDF5 needed.
+add_executable(test_interp_core test_interp_core.cpp)
+
+target_link_libraries(test_interp_core PRIVATE wli_lib)
+
+add_test(NAME interp_core COMMAND test_interp_core)
