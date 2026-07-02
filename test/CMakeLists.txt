@@ -15,3 +15,11 @@ else()
 endif()
 
 add_test(NAME scaffold COMMAND wli_tests)
+
+# Column-major flat-index round-trip (src/lib/wli_index.H). Header-only helper,
+# so this links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(wli_index_tests test_index_roundtrip.cpp)
+
+target_link_libraries(wli_index_tests PRIVATE wli_lib)
+
+add_test(NAME index_roundtrip COMMAND wli_index_tests)
