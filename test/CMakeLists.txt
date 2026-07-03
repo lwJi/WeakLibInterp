@@ -89,3 +89,12 @@ add_executable(test_iso_point test_iso_point.cpp)
 target_link_libraries(test_iso_point PRIVATE wli_lib)
 
 add_test(NAME iso_point COMMAND test_iso_point)
+
+# NES/Pair aligned 2D2D bilinear single-point evaluate kernel
+# (src/lib/wli_opacity.H, specs/opacity-nes-pair.md). Header-only, synthetic 5D
+# table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_nes_pair_point test_nes_pair_point.cpp)
+
+target_link_libraries(test_nes_pair_point PRIVATE wli_lib)
+
+add_test(NAME nes_pair_point COMMAND test_nes_pair_point)
