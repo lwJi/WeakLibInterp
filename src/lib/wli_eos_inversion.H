@@ -26,9 +26,13 @@
 // amrex::Initialize dependency, and uses wli::Real (= double) throughout, never
 // amrex::Real. Raw Real const* + int extents are passed (never a TableView).
 //
-// Scope: DEY only, via a GENERIC _DXY core so the DPY/DSY wrappers (next
-// increment) are wrapper-only. The _Many array form, the DescribeEOSInversionError
-// string table, and the _Error/_NoError naming matrix are out of scope here.
+// Scope: the three families DEY/DPY/DSY over a GENERIC _DXY core (the family
+// wrappers are wrapper-only — one sub-table pointer + one scalar name differ).
+// Reporting matrix: the struct-returning EosInversionResult{T,Error} form IS the
+// `_Error` form (it returns the code); the bare-Real `_NoError` form forwards to
+// it and returns only .T, so T==0 is the sole failure signal (spec:108-111,
+// implementation freedom spec:162). The _Many array form and the
+// DescribeEOSInversionError string table remain out of scope here.
 
 #include <cmath>
 
@@ -276,6 +280,137 @@ EosInversionResult ComputeTemperatureWith_DEY_Guess(
                                               OS, Es, T_Guess, T);
   if (Error != 0) T = Real(0);
   return EosInversionResult{T, Error};
+}
+
+// DPY no-guess wrapper (oracle :760-861): textually identical to DEY_NoGuess
+// apart from the dependent scalar (P) and its sub-table pointer (Ps). Bounds
+// b.MinX/MaxX carry the P extents (one generic bounds struct serves E/P/S).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+EosInversionResult ComputeTemperatureWith_DPY_NoGuess(
+    Real D, Real P, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ps,
+    EosInversionBounds const& b) noexcept {
+  Real T = Real(0);
+  int  Error = CheckInputError(D, P, Y, b);
+  if (Error == 0)
+    Error = ComputeTemperatureWith_DXY_NoGuess(D, P, Y, Ds, nD, Ts, nT, Ys, nY,
+                                               OS, Ps, T);
+  if (Error != 0) T = Real(0);
+  return EosInversionResult{T, Error};
+}
+
+// DPY guess-driven wrapper (oracle :760-861): same cascade, extra T_Guess.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+EosInversionResult ComputeTemperatureWith_DPY_Guess(
+    Real D, Real P, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ps, Real T_Guess,
+    EosInversionBounds const& b) noexcept {
+  Real T = Real(0);
+  int  Error = CheckInputError(D, P, Y, b);
+  if (Error == 0)
+    Error = ComputeTemperatureWith_DXY_Guess(D, P, Y, Ds, nD, Ts, nT, Ys, nY,
+                                              OS, Ps, T_Guess, T);
+  if (Error != 0) T = Real(0);
+  return EosInversionResult{T, Error};
+}
+
+// DSY no-guess wrapper (oracle :904-1005): textually identical to DEY/DPY apart
+// from the dependent scalar (S) and its sub-table pointer (Ss). Bounds
+// b.MinX/MaxX carry the S extents.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+EosInversionResult ComputeTemperatureWith_DSY_NoGuess(
+    Real D, Real S, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ss,
+    EosInversionBounds const& b) noexcept {
+  Real T = Real(0);
+  int  Error = CheckInputError(D, S, Y, b);
+  if (Error == 0)
+    Error = ComputeTemperatureWith_DXY_NoGuess(D, S, Y, Ds, nD, Ts, nT, Ys, nY,
+                                               OS, Ss, T);
+  if (Error != 0) T = Real(0);
+  return EosInversionResult{T, Error};
+}
+
+// DSY guess-driven wrapper (oracle :904-1005): same cascade, extra T_Guess.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+EosInversionResult ComputeTemperatureWith_DSY_Guess(
+    Real D, Real S, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ss, Real T_Guess,
+    EosInversionBounds const& b) noexcept {
+  Real T = Real(0);
+  int  Error = CheckInputError(D, S, Y, b);
+  if (Error == 0)
+    Error = ComputeTemperatureWith_DXY_Guess(D, S, Y, Ds, nD, Ts, nT, Ys, nY,
+                                              OS, Ss, T_Guess, T);
+  if (Error != 0) T = Real(0);
+  return EosInversionResult{T, Error};
+}
+
+// ---------------------------------------------------------------------------
+// _NoError bare-Real forms (oracle _NoError variants): forward to the matching
+// _Error wrapper and return only .T. T==0 is then the sole failure signal — a
+// NoError caller cannot recover the code (spec:108-111). One per family x guess
+// mode, a complete matrix.
+// ---------------------------------------------------------------------------
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DEY_NoGuess_NoError(
+    Real D, Real E, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Es,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DEY_NoGuess(D, E, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                            Es, b)
+      .T;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DEY_Guess_NoError(
+    Real D, Real E, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Es, Real T_Guess,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DEY_Guess(D, E, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                          Es, T_Guess, b)
+      .T;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DPY_NoGuess_NoError(
+    Real D, Real P, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ps,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DPY_NoGuess(D, P, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                            Ps, b)
+      .T;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DPY_Guess_NoError(
+    Real D, Real P, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ps, Real T_Guess,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DPY_Guess(D, P, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                          Ps, T_Guess, b)
+      .T;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DSY_NoGuess_NoError(
+    Real D, Real S, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ss,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DSY_NoGuess(D, S, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                            Ss, b)
+      .T;
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real ComputeTemperatureWith_DSY_Guess_NoError(
+    Real D, Real S, Real Y, Real const* Ds, int nD, Real const* Ts, int nT,
+    Real const* Ys, int nY, Real OS, Real const* Ss, Real T_Guess,
+    EosInversionBounds const& b) noexcept {
+  return ComputeTemperatureWith_DSY_Guess(D, S, Y, Ds, nD, Ts, nT, Ys, nY, OS,
+                                          Ss, T_Guess, b)
+      .T;
 }
 
 }  // namespace wli

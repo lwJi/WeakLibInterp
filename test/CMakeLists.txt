@@ -63,3 +63,11 @@ add_executable(test_eos_inversion_dey test_eos_inversion_dey.cpp)
 target_link_libraries(test_eos_inversion_dey PRIVATE wli_lib)
 
 add_test(NAME eos_inversion_dey COMMAND test_eos_inversion_dey)
+
+# EOS temperature-inversion family wrappers DPY/DSY + _NoError reporting
+# (src/lib/wli_eos_inversion.H). Header-only, so links only wli_lib; no HDF5.
+add_executable(test_eos_inversion_family test_eos_inversion_family.cpp)
+
+target_link_libraries(test_eos_inversion_family PRIVATE wli_lib)
+
+add_test(NAME eos_inversion_family COMMAND test_eos_inversion_family)
