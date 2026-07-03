@@ -24,7 +24,7 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 
 - **Validate specs:** `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh`
 - **Configure:** `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
-- **Build the library + suite:** `cmake --build build -j4` (cap `-j`; AMReX is large and uncapped builds OOM this host)
+- **Build the library + suite:** `cmake --build build -j4` (cap `-j`; AMReX is large and uncapped builds OOM this host). After adding a new test target to `test/CMakeLists.txt`, re-run the configure step first — the incremental build won't see the new target otherwise.
 - **Run the regression suite:** `ctest --test-dir build --output-on-failure`
 - Host toolchain prerequisites (apt, reinstall if the sandbox resets): `cmake`, `g++`, `libhdf5-dev` (HDF5 C++ bindings at `/usr/include/hdf5/serial/H5Cpp.h`). Never install Fortran/Matlab. Do not enable `AMReX_HDF5` — HDF5 is found independently.
 
