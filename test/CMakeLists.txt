@@ -55,3 +55,11 @@ add_executable(test_eos_diff_point test_eos_diff_point.cpp)
 target_link_libraries(test_eos_diff_point PRIVATE wli_lib)
 
 add_test(NAME eos_diff_point COMMAND test_eos_diff_point)
+
+# EOS temperature-inversion core, DEY family (src/lib/wli_eos_inversion.H).
+# Header-only, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_eos_inversion_dey test_eos_inversion_dey.cpp)
+
+target_link_libraries(test_eos_inversion_dey PRIVATE wli_lib)
+
+add_test(NAME eos_inversion_dey COMMAND test_eos_inversion_dey)
