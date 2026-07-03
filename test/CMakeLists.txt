@@ -107,3 +107,12 @@ add_executable(test_nes_detailed_balance test_nes_detailed_balance.cpp)
 target_link_libraries(test_nes_detailed_balance PRIVATE wli_lib)
 
 add_test(NAME nes_detailed_balance COMMAND test_nes_detailed_balance)
+
+# Pair crossing-symmetry fill of the upper energy triangle
+# (src/lib/wli_opacity.H, specs/opacity-nes-pair.md:158-174). Header-only,
+# synthetic 5D table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_pair_crossing_symmetry test_pair_crossing_symmetry.cpp)
+
+target_link_libraries(test_pair_crossing_symmetry PRIVATE wli_lib)
+
+add_test(NAME pair_crossing_symmetry COMMAND test_pair_crossing_symmetry)

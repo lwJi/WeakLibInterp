@@ -289,4 +289,44 @@ Real NESDetailedBalanceFillPoint(
   return lower * std::exp((E[iE] - E[iEp]) / T);
 }
 
+// Pair crossing-symmetry fill of the UPPER energy triangle (iEp > iE) for one
+// kernel component (specs/opacity-nes-pair.md:158-174, Bruenn 1985 Eq. C64).
+// The aligned primitive above computes only the LOWER triangle (iEp <= iE); the
+// upper triangle is NOT independently interpolated — it is filled by a crossing
+// symmetry that TRANSPOSES the two energy indices AND EXCHANGES the in-pair /
+// cross-pair kernel components (Ji <-> Jii). The exact relation the consumer
+// applies, weaklib/.../wlOpacityInterpolationModule.f90:196-228:
+//   Phi0(iEp, iE) = C_i * Kernel(iE, iEp, iJii0) + C_ii * Kernel(iE, iEp, iJi0)
+//   Phi1(iEp, iE) = C_i * Kernel(iE, iEp, iJii1) + C_ii * Kernel(iE, iEp, iJi1)
+// contrasted with the lower triangle, where the components are NOT swapped.
+// The defining, machinery-independent statement is Kernel_i(E',E)=Kernel_ii(E,E')
+// (spec:174): an EXACT RELABELING — there is NO Boltzmann factor and NO scaling.
+//
+// This leaf reads ONE kernel component at the swapped (kernelSwapped) index by
+// COMPOSING the primitive with the two energy indices SWAPPED — the primitive's
+// first two energy args are (iEp, iE), so passing (iE, iEp) here reads the
+// transposed entry Kernel(iE, iEp, kernelSwapped). It performs NO component
+// selection and applies NO C_i/C_ii weighting (those are consumer assembly data,
+// out of the interpolation contract, spec:32,:221): the caller supplies the
+// already-swapped kernel index (e.g. iJii0 in place of iJi0) and the OS matching
+// THAT swapped kernel (OS is per-(opacity,kernel), spec:92) — mirroring how
+// NESDetailedBalanceFillPoint takes a bare int kernel and its own OS.
+//
+// CRITICAL guard (differs from NES): the diagonal iEp == iE is NOT a fixed point
+// here — the Ji <-> Jii component swap is not a no-op on the diagonal, so the
+// diagonal stays on the LOWER-triangle (unswapped) path. The caller applies this
+// fill ONLY for iEp > iE (oracle: lower triangle iEp=1..iE inclusive of the
+// diagonal, f90:160-192). No Boltzmann factor / no E, T params, unlike NES.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real PairCrossingSymmetryFillPoint(
+    Real LogT, Real LogX, Real const* LogTs, int nT, Real const* LogXs,
+    int nEta, int iEp, int iE, int nEp, int nE, int kernelSwapped, int nMom,
+    Real OS, Real const* table) noexcept {
+  // Transposed entry Kernel(iE, iEp, kernelSwapped): SWAP the two energy indices
+  // and read the caller-supplied swapped kernel component. Exact relabeling.
+  return NESPairInterpolateSingleVariable2D2DAlignedPoint(
+      LogT, LogX, LogTs, nT, LogXs, nEta, iE, iEp, nEp, nE, kernelSwapped, nMom,
+      OS, table);
+}
+
 }  // namespace wli
