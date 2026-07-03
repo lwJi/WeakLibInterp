@@ -48,6 +48,8 @@
 // Multi-point/array forms (ParallelFor over this _Point core) are out of scope
 // here; they will reuse this same 16-corner gather + wli::TetraLinear kernel.
 
+#include <cmath>  // std::exp (NES detailed-balance Boltzmann factor)
+
 #include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
 
 #include "wli_index.H"
@@ -244,6 +246,47 @@ Real NESPairInterpolateSingleVariable2D2DAlignedPoint(
   // dX2 = dX (eta) — matches Fortran dY1 = dT, dY2 = dX.
   Real const f = BiLinear(p00, p10, p01, p11, dT, dX);
   return recover(f, OS);
+}
+
+// NES detailed-balance symmetry fill of the UPPER energy triangle (iEp > iE)
+// for one assembled kernel value (specs/opacity-nes-pair.md:148-156). The
+// aligned primitive above computes only the LOWER triangle (iEp <= iE); the
+// upper triangle is NOT independently interpolated (those table entries may be
+// unpopulated) — it is filled from the symmetric lower-triangle value scaled by
+// the Boltzmann factor. The exact relation the consumer applies
+//   weaklib/.../wlOpacityInterpolationModule.f90:104-115:
+//     Phi(iEp, iE) = Phi(iE, iEp) * exp( ( E(iE) - E(iEp) ) / T )   for iEp > iE
+// This leaf COMPOSES the primitive rather than re-deriving it: it reads the
+// symmetric lower-triangle value by calling
+// NESPairInterpolateSingleVariable2D2DAlignedPoint with the two energy indices
+// SWAPPED — the primitive's first two energy args are (iEp, iE), so passing
+// (iE, iEp) here reads Phi(iE, iEp) — then multiplies by exp((E[iE]-E[iEp])/T).
+//
+// CRITICAL units/plumbing (spec:80-86, :227): E[] and T are PHYSICAL (MeV),
+// NOT log-space — distinct from LogT/LogTs, which the primitive alone consumes.
+// This leaf never touches the log grids beyond forwarding them. Energies must be
+// strictly increasing with index, so for iEp > iE we have E[iE] < E[iEp] and the
+// factor is < 1 (the upper triangle is Boltzmann-suppressed). Subtracting in the
+// wrong order gives the reciprocal exp((E[iEp]-E[iE])/T) > 1 — a physics bug the
+// closure test guards against.
+//
+// No triangle guard is applied inside the leaf: the same formula also yields the
+// DIAGONAL fixed point iEp == iE (E[iE] == E[iEp] -> factor exp(0) = 1, returning
+// the primitive value unchanged, spec:203). The caller applies this fill only for
+// iEp >= iE. E is 0-based here (C++), unlike the 1-based Fortran E(iE). This is
+// the NES relation ONLY; the Pair crossing-symmetry fill (index + i/ii component
+// swap, no Boltzmann factor, spec:158-174) is a separate leaf.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real NESDetailedBalanceFillPoint(
+    Real LogT, Real LogX, Real const* LogTs, int nT, Real const* LogXs,
+    int nEta, int iEp, int iE, int nEp, int nE, int kernel, int nMom, Real OS,
+    Real const* table, Real const* E, Real T) noexcept {
+  // Symmetric lower-triangle value Phi(iE, iEp): SWAP the two energy indices.
+  Real const lower = NESPairInterpolateSingleVariable2D2DAlignedPoint(
+      LogT, LogX, LogTs, nT, LogXs, nEta, iE, iEp, nEp, nE, kernel, nMom, OS,
+      table);
+  // Boltzmann factor exp((E(iE) - E(iEp)) / T): physical energies + T in MeV.
+  return lower * std::exp((E[iE] - E[iEp]) / T);
 }
 
 }  // namespace wli
