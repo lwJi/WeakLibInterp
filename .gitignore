@@ -1,8 +1,11 @@
 .tasks
 .research
 .build
-build/
+.ralph
+
 .claude/settings.local.json
+
+build/
 
 *.pyc
 .vscode
