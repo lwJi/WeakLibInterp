@@ -80,3 +80,12 @@ add_executable(test_emab_point test_emab_point.cpp)
 target_link_libraries(test_emab_point PRIVATE wli_lib)
 
 add_test(NAME emab_point COMMAND test_emab_point)
+
+# Iso single-point 5D-slice-to-4D evaluate kernel (src/lib/wli_opacity.H,
+# specs/opacity-emab-iso.md). Header-only, synthetic 5D table, so links only
+# wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_iso_point test_iso_point.cpp)
+
+target_link_libraries(test_iso_point PRIVATE wli_lib)
+
+add_test(NAME iso_point COMMAND test_iso_point)
