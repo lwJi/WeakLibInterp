@@ -71,3 +71,12 @@ add_executable(test_eos_inversion_family test_eos_inversion_family.cpp)
 target_link_libraries(test_eos_inversion_family PRIVATE wli_lib)
 
 add_test(NAME eos_inversion_family COMMAND test_eos_inversion_family)
+
+# EmAb single-point 4D evaluate kernel (src/lib/wli_opacity.H,
+# specs/opacity-emab-iso.md). Header-only, synthetic table, so links only
+# wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_emab_point test_emab_point.cpp)
+
+target_link_libraries(test_emab_point PRIVATE wli_lib)
+
+add_test(NAME emab_point COMMAND test_emab_point)
