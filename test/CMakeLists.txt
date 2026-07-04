@@ -116,3 +116,12 @@ add_executable(test_pair_crossing_symmetry test_pair_crossing_symmetry.cpp)
 target_link_libraries(test_pair_crossing_symmetry PRIVATE wli_lib)
 
 add_test(NAME pair_crossing_symmetry COMMAND test_pair_crossing_symmetry)
+
+# Brem aligned summed 2D2D bilinear single-point evaluate kernels
+# (src/lib/wli_opacity.H, specs/opacity-brem.md). Header-only, synthetic 5D
+# table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_brem_point test_brem_point.cpp)
+
+target_link_libraries(test_brem_point PRIVATE wli_lib)
+
+add_test(NAME brem_point COMMAND test_brem_point)
