@@ -125,3 +125,17 @@ add_executable(test_brem_point test_brem_point.cpp)
 target_link_libraries(test_brem_point PRIVATE wli_lib)
 
 add_test(NAME brem_point COMMAND test_brem_point)
+
+# EOS HDF5 reader structural-conformance self-test (src/lib/wli_io_eos.H,
+# specs/table-format-and-io.md:171-175). Parses the committed h5ls snapshot and
+# asserts the reader's expected schema matches it; does NOT open any live .h5,
+# so it runs without the multi-GB production table present. HDF5 include path
+# comes transitively from wli_lib (PUBLIC).
+add_executable(test_eos_reader_schema test_eos_reader_schema.cpp)
+
+target_link_libraries(test_eos_reader_schema PRIVATE wli_lib)
+
+target_compile_definitions(test_eos_reader_schema PRIVATE
+  WLI_EOS_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-EOS-SFHo-15-25-50.h5ls")
+
+add_test(NAME eos_reader_schema COMMAND test_eos_reader_schema)
