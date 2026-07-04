@@ -40,9 +40,11 @@
 namespace wli {
 
 // ln10 = LOG(10), the reconstitution constant (weaklib wlInterpolationModule
-// F90; spec:83-86). Used by the per-axis derivative chain-rule scale factors
-// (a later task); exposed here as the shared constant.
-AMREX_GPU_HOST_DEVICE inline const Real ln10 = std::log(Real(10));
+// F90; spec:83-86). Used by the per-axis derivative chain-rule scale factors.
+// Spelled as the correctly-rounded double literal (== std::log(Real(10)),
+// asserted in the suite) because nvcc rejects dynamically-initialized
+// device-visible globals; constexpr is usable from both host and device.
+inline constexpr Real ln10 = 2.30258509299404568401799145468436421;
 
 // -------------------------------------------------------------------------
 // Bracket + delta (oracle :104-209)
