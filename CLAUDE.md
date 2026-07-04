@@ -1,6 +1,12 @@
 # WeakLibInterp — loop operating manual
 
-This file auto-loads in every session (orchestrator and every subagent). It carries the standing goal, the constraints every agent judges relevance against, and how to build/run the project. Status and progress live in `TODO.md`, never here.
+## Specifications
+
+**IMPORTANT:** Before implementing any feature, consult the specifications in `specs/README.md`.
+
+- **Check the codebase first.** Before concluding something is or isn't implemented, search the actual code. Specs describe intent; code describes reality.
+- **Use specs as guidance.** When implementing a feature, follow the design patterns, types, and architecture defined in the relevant spec.
+- **Spec index:** `specs/README.md` lists all specifications organized by category.
 
 ## Goal & constraints (the mission — every agent honors this)
 
@@ -14,7 +20,7 @@ This file auto-loads in every session (orchestrator and every subagent). It carr
 ## Layout
 
 - `specs/*` — acceptance source of truth (WHAT must hold). `specs/tools/`, `specs/fixtures/`.
-- `src/*` — implementation; `src/lib/*` is the shared standard library. *(Not created yet — greenfield.)*
+- `src/*` — implementation; `src/lib/*` is the shared standard library.
 - `TODO.md` — the durable, priority-sorted plan; the only state carried between loop iterations. Completed items are marked `- [x]` in place by the build loop (never removed); they are pruned only when the plan loop recreates the file.
 - Sibling repos (read-only sources of truth): `../amrex` (device interface), `../weaklib` and `../thornado` (Fortran behavior being reimplemented).
 
@@ -28,6 +34,8 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 - **Run the regression suite:** `ctest --test-dir build --output-on-failure`
 - **Single-precision pin verification** (build-integration.md §63): `cmake -S . -B build-single -DCMAKE_BUILD_TYPE=Release -DWLI_AMREX_PRECISION=SINGLE` → `cmake --build build-single -j4` → `ctest --test-dir build-single --output-on-failure`. Separate tree required — `AMREX_USE_FLOAT` is baked into the AMReX compile, so `build-single/` (gitignored) is a full second AMReX build, not reusable with `build/`. `WLI_AMREX_PRECISION` defaults to `DOUBLE`; the default build is unaffected.
 - Host toolchain prerequisites (apt, reinstall if the sandbox resets): `cmake`, `g++`, `libhdf5-dev` (HDF5 C++ bindings at `/usr/include/hdf5/serial/H5Cpp.h`). Never install Fortran/Matlab. Do not enable `AMReX_HDF5` — HDF5 is found independently.
+
+- **GitHub CI:** `.github/workflows/ci.yml` runs on every push (all branches): spec validation + double-precision build/ctest on ubuntu-latest. Sibling repos are cloned at pinned SHAs via the `AMREX_REF`/`WEAKLIB_REF` env vars at the top of the workflow — bump those when the local `../amrex`/`../weaklib` checkouts move. AMReX compiles are ccache-cached keyed on `AMREX_REF`.
 
 When you learn a concrete build/test command, update this section (see loop rule below) so the next iteration inherits it instead of rediscovering it.
 
