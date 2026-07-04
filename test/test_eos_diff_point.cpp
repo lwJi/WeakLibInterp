@@ -1,6 +1,6 @@
 // Self-contained acceptance probe for the EOS single-point evaluate-and-
 // differentiate kernel
-// (src/lib/wli_eos.H::EosInterpolateDifferentiateSingleVariable3DPoint).
+// (src/eos/wli_eos.H::EosInterpolateDifferentiateSingleVariable3DPoint).
 //
 // Enforces the derivative-bearing self-contained checks of
 // specs/eos-interpolation.md (Verification :110-118) for the matched

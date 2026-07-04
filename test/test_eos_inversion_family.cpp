@@ -1,6 +1,6 @@
 // Self-contained acceptance probe for the EOS temperature-inversion FAMILY
 // wrappers DPY (X = pressure) and DSY (X = entropy per baryon), plus the
-// bare-Real `_NoError` reporting forms (src/lib/wli_eos_inversion.H).
+// bare-Real `_NoError` reporting forms (src/eos/wli_eos_inversion.H).
 //
 // The three families share one generic _DXY kernel; a sub-table is all the
 // algorithm sees, so the synthetic affine/nonaffine models reused here for the P

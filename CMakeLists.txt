@@ -102,5 +102,5 @@ find_package(HDF5 REQUIRED COMPONENTS C CXX)
 
 enable_testing()
 
-add_subdirectory(src/lib)
+add_subdirectory(src)
 add_subdirectory(test)

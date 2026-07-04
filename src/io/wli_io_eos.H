@@ -4,7 +4,7 @@
 //
 // Single source of truth for loading the weaklib EOS production table
 // (wl-EOS-SFHo-15-25-50.h5) into host memory in the layout the interpolators
-// and the device-residency upload (src/lib/wli_table.H) consume, with NO
+// and the device-residency upload (src/core/wli_table.H) consume, with NO
 // adapter layer. The reader contract (group/dataset names, Fortran column-major
 // shapes, dtypes, 1D per-variable Offsets, names-before-arrays read order) is
 // pinned by specs/table-format-and-io.md and anchored to the committed

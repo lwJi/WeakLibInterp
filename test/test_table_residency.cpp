@@ -1,7 +1,7 @@
 // Device table-residency / upload helper acceptance probe.
 //
 // Exercises the ONE metadata + residency/upload convention in
-// src/lib/wli_table.H (specs/amrex-device-interface.md:36-44,80-88,90-105):
+// src/core/wli_table.H (specs/amrex-device-interface.md:36-44,80-88,90-105):
 //
 //  1. Upload round-trip (3D, 4D, 5D): fully populate a host buffer with distinct
 //     exactly-representable per-index sentinels, ResidentTable::upload(...), then

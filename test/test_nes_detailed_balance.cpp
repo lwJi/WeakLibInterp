@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the NES detailed-balance symmetry fill
-// (src/lib/wli_opacity.H::NESDetailedBalanceFillPoint).
+// (src/opacity/wli_opacity_nes_pair.H::NESDetailedBalanceFillPoint).
 //
 // Enforces spec verification item 4 (specs/opacity-nes-pair.md:148-156, :203),
 // whose oracle is the consumer relation

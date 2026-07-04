@@ -1,6 +1,6 @@
 // Self-contained acceptance probe for the scalar multilinear interpolation core
-// (src/lib/wli_interp.H) and the shared tolerance comparator
-// (src/lib/wli_compare.H).
+// (src/core/wli_interp.H) and the shared tolerance comparator
+// (src/core/wli_compare.H).
 //
 // Enforces the self-contained regression checks of the cross-cutting numeric
 // contract (specs/fortran-parity-and-tolerances.md:135-142):

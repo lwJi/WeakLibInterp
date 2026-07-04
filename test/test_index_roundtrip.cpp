@@ -1,6 +1,6 @@
 // Column-major flat-index round-trip acceptance probe.
 //
-// Proves the index arithmetic in src/lib/wli_index.H matches the documented
+// Proves the index arithmetic in src/core/wli_index.H matches the documented
 // column-major formula (specs/amrex-device-interface.md:64-79,101): for 3D, 4D
 // and 5D shapes (plus cheap 1D/2D), write a distinct sentinel double into a
 // flat Gpu::DeviceVector<double> at each (i0,...,i_{D-1}) using the helper's

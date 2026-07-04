@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the Pair crossing-symmetry fill
-// (src/lib/wli_opacity.H::PairCrossingSymmetryFillPoint).
+// (src/opacity/wli_opacity_nes_pair.H::PairCrossingSymmetryFillPoint).
 //
 // Enforces spec verification item 5 (specs/opacity-nes-pair.md:158-174, :204),
 // whose oracle is the consumer relation

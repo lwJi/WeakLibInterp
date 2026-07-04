@@ -1,7 +1,7 @@
 // Self-contained acceptance probe for the Brem (nucleon-nucleon bremsstrahlung)
 // aligned, summed two-energy single-point evaluate kernels
-//   src/lib/wli_opacity.H::BremInterpolateSingleDensity2DAlignedPoint (inner)
-//   src/lib/wli_opacity.H::BremInterpolateSingleVariable2D2DAlignedSummedPoint.
+//   src/opacity/wli_opacity_brem.H::BremInterpolateSingleDensity2DAlignedPoint (inner)
+//   src/opacity/wli_opacity_brem.H::BremInterpolateSingleVariable2D2DAlignedSummedPoint.
 //
 // Enforces the self-contained regression checks of specs/opacity-brem.md
 // (Verification :200-211), whose oracle is the aligned scalar core

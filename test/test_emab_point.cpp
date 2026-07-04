@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the EmAb single-point 4D evaluate kernel
-// (src/lib/wli_opacity.H::EmAbInterpolateSingleVariable4DPoint).
+// (src/opacity/wli_opacity_emab_iso.H::EmAbInterpolateSingleVariable4DPoint).
 //
 // Enforces the self-contained regression checks of specs/opacity-emab-iso.md
 // (Verification :138-146) for the evaluate-only tetralinear-in-log kernel, whose

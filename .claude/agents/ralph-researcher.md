@@ -28,7 +28,7 @@ The mission/constraints auto-load from `@CLAUDE.md` — judge every file's relev
 # <area>
 ## Summary             (3–6 bullets: current state vs the chosen task)
 ## Relevant evidence   (key file:line anchors the implementer will need)
-## Reuse opportunities (existing src/lib utilities/components to use instead of new)
+## Reuse opportunities (existing src/ utilities/components to use instead of new)
 ## Risks/blockers      (anything that complicates the increment)
 ```
 
