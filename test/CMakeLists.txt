@@ -157,3 +157,55 @@ target_compile_definitions(test_opacity_reader_schema PRIVATE
   WLI_BREM_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-Brem.h5ls")
 
 add_test(NAME opacity_reader_schema COMMAND test_opacity_reader_schema)
+
+# Regression-suite umbrella: the always-on synthetic coverage matrix
+# (specs/regression-suite-design.md). Realizes all 8 public device entry points x
+# the 4 input regimes + the NES/Pair symmetry-fill closure cells, each asserting
+# one thresholded predicate. Header-only synthetic tables, so links only wli_lib
+# (AMReX CPU/double); no HDF5 needed.
+add_executable(test_coverage_matrix test_coverage_matrix.cpp)
+
+target_link_libraries(test_coverage_matrix PRIVATE wli_lib)
+
+add_test(NAME coverage_matrix COMMAND test_coverage_matrix)
+
+# Deliberate-perturbation meta-test (spec Verification #3): proves the suite's
+# assertions are thresholded, not print-only, by injecting a 10x error and
+# asserting the comparator flags it. Header-only; no HDF5.
+add_executable(test_perturbation_meta test_perturbation_meta.cpp)
+
+target_link_libraries(test_perturbation_meta PRIVATE wli_lib)
+
+add_test(NAME perturbation_meta COMMAND test_perturbation_meta)
+
+# Production-table loader/guard (spec:67,113). Resolves the 6 named .h5 tables
+# under $WL_TABLES_ROOT and runs node-identity / boundary / NaN cells via the
+# public readers when present; returns 77 (CTest SKIP) when WL_TABLES_ROOT is
+# unset or no table is found. Links the C++ HDF5 bindings (mirrors wli_tests)
+# because it exercises the live readers.
+add_executable(test_production_tables test_production_tables.cpp)
+
+target_link_libraries(test_production_tables PRIVATE wli_lib)
+
+# This is the only test that actually CALLS the live readers (wli_io_*.cpp),
+# pulling those objects out of the wli_lib archive; they reference the HDF5 C
+# API (H5check_version, ...). The C++ bindings target/list does not transitively
+# carry the base C library on this host, so link both the C++ bindings and the
+# C library explicitly.
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_production_tables PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_production_tables PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_production_tables PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+
+find_library(WLI_HDF5_C_LIB NAMES hdf5_serial hdf5
+  HINTS ${HDF5_CXX_LIBRARY_DIRS} /usr/lib/aarch64-linux-gnu
+        /usr/lib/aarch64-linux-gnu/hdf5/serial)
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_production_tables PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+add_test(NAME production_tables COMMAND test_production_tables)
+
+set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
