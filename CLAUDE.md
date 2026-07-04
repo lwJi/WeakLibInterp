@@ -29,6 +29,8 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 - **Single-precision pin verification** (build-integration.md §63): `cmake -S . -B build-single -DCMAKE_BUILD_TYPE=Release -DWLI_AMREX_PRECISION=SINGLE` → `cmake --build build-single -j4` → `ctest --test-dir build-single --output-on-failure`. Separate tree required — `AMREX_USE_FLOAT` is baked into the AMReX compile, so `build-single/` (gitignored) is a full second AMReX build, not reusable with `build/`. `WLI_AMREX_PRECISION` defaults to `DOUBLE`; the default build is unaffected.
 - Host toolchain prerequisites (apt, reinstall if the sandbox resets): `cmake`, `g++`, `libhdf5-dev` (HDF5 C++ bindings at `/usr/include/hdf5/serial/H5Cpp.h`). Never install Fortran/Matlab. Do not enable `AMReX_HDF5` — HDF5 is found independently.
 
+- **GitHub CI:** `.github/workflows/ci.yml` runs on every push (all branches): spec validation + double-precision build/ctest on ubuntu-latest. Sibling repos are cloned at pinned SHAs via the `AMREX_REF`/`WEAKLIB_REF` env vars at the top of the workflow — bump those when the local `../amrex`/`../weaklib` checkouts move. AMReX compiles are ccache-cached keyed on `AMREX_REF`.
+
 When you learn a concrete build/test command, update this section (see loop rule below) so the next iteration inherits it instead of rediscovering it.
 
 ## Self-improvement

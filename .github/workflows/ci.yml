@@ -1,0 +1,98 @@
+name: CI
+
+# One run per commit on every branch push; merges to main are covered by the
+# push event on main itself. No pull_request trigger, so PR commits are not
+# double-run.
+on:
+  push:
+
+# Supersede in-flight runs when a branch tip moves, but never cancel main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Pinned sibling-repo revisions (specs/fixtures/tables.provenance pins the
+  # weaklib table layout; these pin the CI checkouts). Bump deliberately.
+  AMREX_REF: 5fbc49bce6ccaaefd771c7594e24e0ef46d5e01c
+  WEAKLIB_REF: 5836de983d2ea1305af31bf971099702759b1889
+
+jobs:
+  validate-specs:
+    name: Spec validation (default mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Checkout pinned weaklib
+        uses: actions/checkout@v4
+        with:
+          repository: starkiller-astro/weaklib
+          ref: ${{ env.WEAKLIB_REF }}
+          path: weaklib
+
+      # Default mode: no WL_TABLES_ROOT, so the live-table refresh stage
+      # prints SKIPPED by design; everything else must pass.
+      - name: Validate specs
+        working-directory: WeakLibInterp
+        env:
+          AMREX_ROOT: ${{ github.workspace }}/amrex
+          WEAKLIB_ROOT: ${{ github.workspace }}/weaklib
+        run: bash specs/tools/validate_specs.sh
+
+  build-test:
+    name: Build + ctest (double precision)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Install HDF5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libhdf5-dev
+
+      # AMReX compilation dominates CI time; ccache keyed on the pinned AMReX
+      # revision turns the ~15-20 min cold build into a few minutes warm.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: amrex-${{ env.AMREX_REF }}
+          max-size: 1G
+
+      - name: Configure
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build WeakLibInterp/build --parallel 4
+
+      # Production-table tests return 77 (SKIP) with WL_TABLES_ROOT unset;
+      # the synthetic-table suite is the always-on signal.
+      - name: Run regression suite
+        run: ctest --test-dir WeakLibInterp/build --output-on-failure
