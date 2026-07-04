@@ -2,7 +2,7 @@
 # dependency; AMReX::amrex transitively carries includes, compile defs (incl.
 # generated config headers), and link libs.
 
-add_library(wli_lib wli.cpp wli_io_eos.cpp)
+add_library(wli_lib wli.cpp wli_io_eos.cpp wli_io_opacity.cpp)
 
 target_include_directories(wli_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

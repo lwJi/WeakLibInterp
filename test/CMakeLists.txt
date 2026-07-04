@@ -139,3 +139,21 @@ target_compile_definitions(test_eos_reader_schema PRIVATE
   WLI_EOS_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-EOS-SFHo-15-25-50.h5ls")
 
 add_test(NAME eos_reader_schema COMMAND test_eos_reader_schema)
+
+# Opacity HDF5 reader structural-conformance self-test (src/lib/wli_io_opacity.H,
+# specs/table-format-and-io.md:171-175). Parses the five committed h5ls snapshots
+# (EmAb/Iso/NES/Pair/Brem) and asserts the reader's expected schema matches them,
+# including the load-bearing 1D-vs-2D Offsets dimensionality; does NOT open any
+# live .h5. HDF5 include path comes transitively from wli_lib (PUBLIC).
+add_executable(test_opacity_reader_schema test_opacity_reader_schema.cpp)
+
+target_link_libraries(test_opacity_reader_schema PRIVATE wli_lib)
+
+target_compile_definitions(test_opacity_reader_schema PRIVATE
+  WLI_EMAB_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-EmAb.h5ls"
+  WLI_ISO_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-Iso.h5ls"
+  WLI_NES_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-NES.h5ls"
+  WLI_PAIR_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-Pair.h5ls"
+  WLI_BREM_H5LS="${CMAKE_SOURCE_DIR}/specs/fixtures/wl-Op-SFHo-15-25-50-E40-Brem.h5ls")
+
+add_test(NAME opacity_reader_schema COMMAND test_opacity_reader_schema)

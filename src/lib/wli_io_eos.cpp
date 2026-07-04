@@ -17,73 +17,16 @@
 
 #include <H5Cpp.h>
 
-#include "wli_index.H"  // wli::flat_index (offset convention, reused not re-derived)
+#include "wli_io_hdf5_detail.H"  // shared read primitives (extracted, no ad-hoc copy)
 
 namespace wli {
 namespace io {
 
-namespace {
-
-// Total element count of a dataspace (product of all extents).
-hssize_t npoints(const H5::DataSet& ds) {
-  return ds.getSpace().getSimpleExtentNpoints();
-}
-
-// Read a full integer dataset as a flat std::vector<int> (H5T_NATIVE_INT).
-std::vector<int> read_int(const H5::H5File& f, const std::string& name) {
-  H5::DataSet ds = f.openDataSet(name);
-  std::vector<int> out(static_cast<std::size_t>(npoints(ds)));
-  ds.read(out.data(), H5::PredType::NATIVE_INT);
-  return out;
-}
-
-// Read a single integer scalar dataset ({1}).
-int read_int_scalar(const H5::H5File& f, const std::string& name) {
-  const std::vector<int> v = read_int(f, name);
-  if (v.empty()) {
-    throw std::runtime_error("wli::io::read_eos_table: empty int dataset " + name);
-  }
-  return v[0];
-}
-
-// Read a full double dataset as a flat std::vector<double> (H5T_NATIVE_DOUBLE).
-// The raw bytes are read contiguously and NOT permuted, so a C-order (h5ls)
-// dataset lands as Fortran column-major with the first Fortran index fastest.
-std::vector<double> read_double(const H5::H5File& f, const std::string& name) {
-  H5::DataSet ds = f.openDataSet(name);
-  std::vector<double> out(static_cast<std::size_t>(npoints(ds)));
-  ds.read(out.data(), H5::PredType::NATIVE_DOUBLE);
-  return out;
-}
-
-// Read a fixed-width string dataset (string[LEN]) into trimmed std::strings.
-std::vector<std::string> read_strings(const H5::H5File& f, const std::string& name) {
-  H5::DataSet ds = f.openDataSet(name);
-  const H5::StrType st = ds.getStrType();
-  const std::size_t len = st.getSize();
-  const std::size_t n = static_cast<std::size_t>(npoints(ds));
-  std::vector<char> buf(n * len, '\0');
-  ds.read(buf.data(), st);
-  std::vector<std::string> out;
-  out.reserve(n);
-  for (std::size_t i = 0; i < n; ++i) {
-    std::string s(buf.data() + i * len, len);
-    const std::size_t e = s.find_last_not_of(std::string(" \0", 2));
-    out.push_back(e == std::string::npos ? std::string() : s.substr(0, e + 1));
-  }
-  return out;
-}
-
-// Try to read a double dataset that may be absent (min/maxValues); returns
-// false without throwing if the dataset does not exist.
-bool try_read_double(const H5::H5File& f, const std::string& name,
-                     std::vector<double>& out) {
-  if (!f.nameExists(name)) return false;
-  out = read_double(f, name);
-  return true;
-}
-
-}  // namespace
+using detail::read_double;
+using detail::read_int;
+using detail::read_int_scalar;
+using detail::read_strings;
+using detail::try_read_double;
 
 HostEosTable read_eos_table(const std::string& path) {
   H5::Exception::dontPrint();
@@ -107,25 +50,8 @@ HostEosTable read_eos_table(const std::string& path) {
 
   // (2) /ThermoState: read Names + LogInterp BEFORE the axis arrays (which are
   // stored under their Names values). Axis identity is index-keyed via
-  // iRho/iT/iYe.
-  {
-    const std::vector<std::string> tsNames = read_strings(file, "/ThermoState/Names");
-    const std::vector<int> logInterp = read_int(file, "/ThermoState/LogInterp");
-    if (tsNames.size() != 3 || logInterp.size() != 3) {
-      throw std::runtime_error(
-          "wli::io::read_eos_table: /ThermoState Names/LogInterp not rank-3");
-    }
-    for (int a = 0; a < 3; ++a) {
-      HostAxis ax;
-      ax.name = tsNames[a];
-      ax.kind = (logInterp[a] != 0) ? wli::AxisKind::Log : wli::AxisKind::Linear;
-      ax.points = read_double(file, "/ThermoState/" + tsNames[a]);
-      t.axes[a] = std::move(ax);
-    }
-    t.tsIndices = {read_int_scalar(file, "/ThermoState/iRho"),
-                   read_int_scalar(file, "/ThermoState/iT"),
-                   read_int_scalar(file, "/ThermoState/iYe")};
-  }
+  // iRho/iT/iYe. Shared with every opacity file (byte-identical /ThermoState).
+  detail::read_thermo_state(file, t.axes, t.tsIndices);
 
   // (3) /DependentVariables: read Names + Offsets (+ optional min/maxValues)
   // BEFORE the value arrays (each stored under its Names value).
