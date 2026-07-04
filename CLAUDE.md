@@ -14,19 +14,19 @@
 
 **Constraints:**
 - Do NOT assume functionality is missing; confirm with code search before concluding absence.
-- Treat `src/lib` as the project's standard library. Prefer consolidated, idiomatic implementations there over ad-hoc copies; flag duplication.
+- Treat `src/` as the project's standard library. Prefer consolidated, idiomatic implementations there over ad-hoc copies; flag duplication.
 - Single source of truth — no migrations/adapters, no placeholders or stubs. Implement completely (build loop).
 
 ## Layout
 
 - `specs/*` — acceptance source of truth (WHAT must hold). `specs/tools/`, `specs/fixtures/`.
-- `src/*` — implementation; `src/lib/*` is the shared standard library.
+- `src/*` — the shared standard library, organized AMReX-style into module dirs `src/{core,eos,opacity,io}/`; every module dir is on the include path, so includes stay flat (`#include "wli_eos.H"`) and the `wli_` filename prefix is the namespace (mirroring `<AMReX_*.H>`). The opacity kernels are one header per opacity leaf spec (`wli_opacity_{emab_iso,nes_pair,brem}.H`) with `wli_opacity.H` as the umbrella.
 - `TODO.md` — the durable, priority-sorted plan; the only state carried between loop iterations. Completed items are marked `- [x]` in place by the build loop (never removed); they are pruned only when the plan loop recreates the file.
 - Sibling repos (read-only sources of truth): `../amrex` (device interface), `../weaklib` and `../thornado` (Fortran behavior being reimplemented).
 
 ## Build & run
 
-Per `specs/build-integration.md` the target is **AMReX CPU-only, double precision, host execution, no Fortran/Matlab**; the correctness-bearing value type is pinned to `double` (`src/lib/wli_real.H`, `wli::Real`) regardless of `amrex::Real`. AMReX resolves from `../amrex` via `add_subdirectory` (override with `-DWLI_AMREX_ROOT=<path>`). Build dir is `build/` (gitignored); `.build/` is agent scratch, never the build dir.
+Per `specs/build-integration.md` the target is **AMReX CPU-only, double precision, host execution, no Fortran/Matlab**; the correctness-bearing value type is pinned to `double` (`src/core/wli_real.H`, `wli::Real`) regardless of `amrex::Real`. AMReX resolves from `../amrex` via `add_subdirectory` (override with `-DWLI_AMREX_ROOT=<path>`). Build dir is `build/` (gitignored); `.build/` is agent scratch, never the build dir.
 
 - **Validate specs:** `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh`
 - **Configure:** `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`

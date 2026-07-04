@@ -5,7 +5,7 @@
 // Single source of truth for loading the five weaklib opacity production tables
 // (wl-Op-SFHo-15-25-50-E40-{EmAb,Iso,NES,Pair,Brem}.h5), one channel per file,
 // into host memory in the log-stored, column-major layout the opacity kernels
-// (src/lib/wli_opacity.H) and the device-residency upload (src/lib/wli_table.H)
+// (src/opacity/wli_opacity.H) and the device-residency upload (src/core/wli_table.H)
 // consume, with NO adapter layer. The reader contract (group/dataset names,
 // Fortran column-major shapes, dtypes, the load-bearing 1D-vs-2D Offsets
 // dimensionality, names-before-arrays read order, the /EmAb legacy fallback,

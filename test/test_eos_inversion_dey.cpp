@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the EOS temperature-inversion core, DEY
-// family (src/lib/wli_eos_inversion.H).
+// family (src/eos/wli_eos_inversion.H).
 //
 // Enforces the self-contained regression checks of specs/eos-inversion.md
 // (Verification :144-152) for the DEY NoGuess + Guess entry points:

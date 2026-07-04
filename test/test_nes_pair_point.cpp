@@ -1,6 +1,6 @@
 // Self-contained acceptance probe for the NES/Pair aligned 2D2D bilinear
 // single-point evaluate kernel
-// (src/lib/wli_opacity.H::NESPairInterpolateSingleVariable2D2DAlignedPoint).
+// (src/opacity/wli_opacity_nes_pair.H::NESPairInterpolateSingleVariable2D2DAlignedPoint).
 //
 // Enforces the self-contained regression checks of specs/opacity-nes-pair.md
 // (Verification :200-206) for the two-energy scattering kernels (NES and Pair),

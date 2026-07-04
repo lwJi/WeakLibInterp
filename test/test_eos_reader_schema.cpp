@@ -5,7 +5,7 @@
 // it parses the committed structural snapshot
 // specs/fixtures/wl-EOS-SFHo-15-25-50.h5ls into a path -> shape map, then
 // asserts that the schema the reader depends on (the fixed dataset names +
-// ranks/shapes exposed as static data in src/lib/wli_io_eos.H) matches the
+// ranks/shapes exposed as static data in src/io/wli_io_eos.H) matches the
 // snapshot EXACTLY. This checks reader-expectation vs snapshot, not snapshot
 // self-consistency.
 //

@@ -4,7 +4,7 @@
 // It parses the five committed structural snapshots
 // specs/fixtures/wl-Op-SFHo-15-25-50-E40-{EmAb,Iso,NES,Pair,Brem}.h5ls into
 // path -> shape maps, then asserts the schema the reader depends on (the fixed
-// names + ranks/shapes exposed as static data in src/lib/wli_io_opacity.H)
+// names + ranks/shapes exposed as static data in src/io/wli_io_opacity.H)
 // matches each snapshot EXACTLY. The single load-bearing distinction is the
 // 1D-vs-2D Offsets dimensionality (spec:162), asserted explicitly per channel.
 //

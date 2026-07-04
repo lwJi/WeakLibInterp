@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the Iso single-point 5D-slice-to-4D
-// evaluate kernel (src/lib/wli_opacity.H::IsoInterpolateSingleVariable5DPoint +
+// evaluate kernel (src/opacity/wli_opacity_emab_iso.H::IsoInterpolateSingleVariable5DPoint +
 // the IsoOffset 2D offset selector).
 //
 // Enforces the Iso-specific self-contained regression checks of

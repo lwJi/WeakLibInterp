@@ -1,5 +1,5 @@
 // Self-contained acceptance probe for the EOS single-point evaluate kernel
-// (src/lib/wli_eos.H::EosInterpolateSingleVariable3DPoint).
+// (src/eos/wli_eos.H::EosInterpolateSingleVariable3DPoint).
 //
 // Enforces the self-contained regression checks of specs/eos-interpolation.md
 // (Verification :110-118) for the evaluate-only trilinear-in-log kernel:

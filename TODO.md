@@ -1,5 +1,7 @@
 # TODO — WeakLibInterp build plan
 
+> **Layout note (2026-07-04):** `src/lib/` has been reorganized into AMReX-style module dirs `src/{core,eos,opacity,io}/` (flat includes, `wli_` filename prefix as namespace), and `wli_opacity.H` split into per-spec channel headers `wli_opacity_{emab_iso,nes_pair,brem}.H` with `wli_opacity.H` as umbrella. Historical `src/lib/...` paths in the notes below refer to the pre-reorg layout; see `CLAUDE.md` Layout for the current one.
+
 Greenfield: no `src/`, no `test/`, no build system exists in the tracked tree yet. Goal is a GPU-friendly C++ reimplementation of weaklib's EOS and opacity interpolators exposed as AMReX-native device functions. All 10 acceptance specs are committed and internally consistent; the synthesis (`.research/synthesis.md`) found no missing spec. This plan decomposes the whole effort into dependency-ordered increments — foundations first (`src/lib` shared math + build scaffold), then EOS, then opacity kernels, then HDF5 readers, then the regression suite. Every increment is status **missing/new**; none is partial. List order within each group = build priority.
 
 ## Standing facts every item inherits
