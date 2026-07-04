@@ -6,6 +6,7 @@
 .claude/settings.local.json
 
 build/
+build-single/
 
 *.pyc
 .vscode

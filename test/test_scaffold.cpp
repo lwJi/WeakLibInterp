@@ -17,6 +17,17 @@
 int main() {
   // Value-type pin: literal double, 8 bytes, independent of amrex::Real.
   static_assert(sizeof(wli::Real) == 8, "wli::Real must be 8-byte double");
+  // Pin is non-vacuous: under a SINGLE-precision AMReX build amrex::Real is
+  // 4 bytes while wli::Real stays 8 — the two types provably diverge, so the
+  // value pin is meaningfully exercised. Under DOUBLE both are 8 bytes.
+#ifdef AMREX_USE_FLOAT
+  static_assert(sizeof(amrex::Real) == 4,
+                "AMREX_USE_FLOAT: amrex::Real must be 4-byte float");
+  static_assert(sizeof(amrex::Real) != sizeof(wli::Real),
+                "SINGLE build must diverge from the double value pin");
+#else
+  static_assert(sizeof(amrex::Real) == 8, "amrex::Real must be 8-byte double");
+#endif
   if (sizeof(wli::Real) != 8) {
     std::fprintf(stderr, "FAIL: sizeof(wli::Real) != 8\n");
     return EXIT_FAILURE;

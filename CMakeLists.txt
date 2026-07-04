@@ -18,8 +18,14 @@ cmake_policy(SET CMP0077 NEW)
 # MPI find_package fails on this (MPI-less) host. CPU-only + double precision
 # is the gating test configuration (specs/build-integration.md).
 # ---------------------------------------------------------------------------
+# Value precision of amrex::Real. Default DOUBLE is the gating build; SINGLE
+# is only for pin-verification (proving wli::Real stays double independently of
+# amrex::Real). AMReX FATAL_ERRORs on any value other than SINGLE/DOUBLE.
+set(WLI_AMREX_PRECISION "DOUBLE" CACHE STRING
+    "AMReX real precision: DOUBLE (gating) or SINGLE (pin-verification)")
+
 set(AMReX_GPU_BACKEND    NONE   CACHE STRING "" FORCE)
-set(AMReX_PRECISION      DOUBLE CACHE STRING "" FORCE)
+set(AMReX_PRECISION      ${WLI_AMREX_PRECISION} CACHE STRING "" FORCE)
 set(AMReX_MPI            OFF    CACHE BOOL   "" FORCE)
 set(AMReX_FORTRAN        OFF    CACHE BOOL   "" FORCE)
 set(AMReX_OMP            OFF    CACHE BOOL   "" FORCE)
