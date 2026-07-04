@@ -16,6 +16,9 @@ env:
   # weaklib table layout; these pin the CI checkouts). Bump deliberately.
   AMREX_REF: 5fbc49bce6ccaaefd771c7594e24e0ef46d5e01c
   WEAKLIB_REF: 5836de983d2ea1305af31bf971099702759b1889
+  # The compile-only GPU jobs below pin upstream vendor toolchain images by
+  # exact tag (nvidia/cuda:12.6.3-devel-ubuntu24.04, rocm/dev-ubuntu-24.04:6.4.1)
+  # in their container.image fields — bump those deliberately, like the refs.
 
 jobs:
   validate-specs:
@@ -96,3 +99,103 @@ jobs:
       # the synthetic-table suite is the always-on signal.
       - name: Run regression suite
         run: ctest --test-dir WeakLibInterp/build --output-on-failure
+
+  # Compile-only GPU checks (CarpetX model): build the library + full suite
+  # with the device compiler to catch missing AMREX_GPU_HOST_DEVICE qualifiers
+  # and host-only calls in device code. No ctest — runners have no GPU; the
+  # CPU build-test job above stays the correctness-bearing gate
+  # (specs/build-integration.md).
+  build-cuda:
+    name: Build (CUDA compile check, sm_80)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    steps:
+      # The devel image has gcc/nvcc but not cmake/git/HDF5.
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libhdf5-dev
+
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: amrex-cuda-${{ env.AMREX_REF }}
+          max-size: 2G
+
+      - name: Configure (CUDA)
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_GPU_BACKEND=CUDA
+          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
+
+      - name: Build (no ctest — no GPU on the runner)
+        run: cmake --build WeakLibInterp/build --parallel 4
+
+  build-rocm:
+    name: Build (ROCm compile check, gfx90a)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: rocm/dev-ubuntu-24.04:6.4.1
+    steps:
+      # The dev image has the ROCm/HIP toolchain but not cmake/git/HDF5;
+      # g++ supplies the libstdc++ headers amdclang++ compiles against.
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libhdf5-dev
+
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: amrex-rocm-${{ env.AMREX_REF }}
+          max-size: 2G
+
+      # AMReX requires an AMD/Cray HIP compiler as CMAKE_CXX_COMPILER for HIP
+      # builds; CMAKE_PREFIX_PATH lets find_package(hip) resolve the ROCm
+      # CMake packages under /opt/rocm.
+      - name: Configure (HIP)
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_GPU_BACKEND=HIP
+          -DCMAKE_CXX_COMPILER=/opt/rocm/bin/amdclang++
+          -DCMAKE_PREFIX_PATH=/opt/rocm
+          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build (no ctest — no GPU on the runner)
+        run: cmake --build WeakLibInterp/build --parallel 4

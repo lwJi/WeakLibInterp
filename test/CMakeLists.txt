@@ -209,3 +209,12 @@ endif()
 add_test(NAME production_tables COMMAND test_production_tables)
 
 set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
+
+# Compile-check backends (WLI_GPU_BACKEND=CUDA/HIP): compile every suite
+# executable with the device compiler so the ParallelFor launches and device
+# kernels in the tests are compile-checked too; no-op for the gating NONE
+# build (and CI never runs ctest under CUDA/HIP — no GPU on the runners).
+get_property(_wli_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_wli_t IN LISTS _wli_test_targets)
+  wli_gpu_target(${_wli_t})
+endforeach()

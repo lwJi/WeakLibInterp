@@ -4,11 +4,12 @@
 
 ## Purpose & scope
 
-This spec defines the build and integration contract: AMReX is a **required** dependency, built **CPU-only, double precision**, for host testing with no GPU; the library and the regression suite both link it; the correctness-bearing value type is pinned to `double` regardless of `amrex::Real`; and there is **no Fortran or Matlab dependency** at build or runtime. It is the single place a fresh agent learns what must be present and configured to compile the device entry points and run the suite.
+This spec defines the build and integration contract: AMReX is a **required** dependency, built **CPU-only, double precision**, for host testing with no GPU; the library and the regression suite both link it; the correctness-bearing value type is pinned to `double` regardless of `amrex::Real`; and there is **no Fortran or Matlab dependency** at build or runtime. In addition, the library + suite must **compile** (not run) under AMReX's CUDA and HIP GPU backends — a compile-only gate that keeps the device code honest without requiring GPU hardware. It is the single place a fresh agent learns what must be present and configured to compile the device entry points and run the suite.
 
 In scope:
 - AMReX as a required build/link dependency of both the library and the regression suite, and where its source is available (the sibling `amrex` repo).
 - The required AMReX build configuration for the test target: CPU-only (no CUDA/HIP/SYCL), double precision, host execution; how the qualifier macros and `ParallelFor` collapse to host-only code under it.
+- The **compile-only GPU checks**: the library + suite must also *compile* under AMReX's CUDA and HIP backends (device compiler, concrete target architecture), proving the device qualifiers and launches are real device code — without any GPU execution; the CPU/double suite remains the only correctness-bearing (ctest-gating) build.
 - How the library and suite consume AMReX (its headers + the `Gpu::DeviceVector` / `ParallelFor` / qualifier-macro surface from `amrex-device-interface.md`).
 - The value-type pin: the correctness-bearing type is `double` (weaklib `dp = 8`) regardless of `amrex::Real`; on-disk reals stay `H5T_NATIVE_DOUBLE`.
 - The explicit absence of any Fortran/Matlab build or runtime dependency.
@@ -18,7 +19,7 @@ Out of scope:
 - The HDF5 reader's API choice and on-disk layout (see `table-format-and-io.md`); this spec only states that reading needs the C++ HDF5 library, not Fortran.
 - The device interface mechanics (qualifier macros, residency, launch) — see `amrex-device-interface.md`.
 - The regression-suite coverage matrix and pass/fail discipline (see `regression-suite-design.md`).
-- GPU build/run validation (a GPU build is a drop-in, but is not exercised here).
+- GPU *execution* validation (numerical results on a physical GPU are not exercised anywhere; the GPU contract here is compile-only).
 
 ## Source of truth
 
@@ -53,6 +54,7 @@ There is **no Fortran compiler and no Matlab** in the build or at runtime. The w
 - **Value type pinned to `double`, independent of `amrex::Real`.** The correctness-bearing tables are `Gpu::DeviceVector<double>` and the entry points take `double const*`; the value type is fixed to `double` (= weaklib `dp = 8`) **regardless of how `amrex::Real` is configured**. A single-precision AMReX build (`amrex::Real = float`) must not be able to silently degrade bit-level parity — the interpolator's tables and entry points still use `double`. The on-disk reader contract remains `H5T_NATIVE_DOUBLE` (see `table-format-and-io.md`). This is a requirement the build must enforce, not a property AMReX provides.
 - **No Fortran/Matlab build or runtime dependency.** The build pipeline invokes no Fortran compiler and no Matlab; nothing in the library or the suite calls a Fortran/Matlab routine at build time or test time (see `fortran-parity-and-tolerances.md` / `regression-suite-design.md`).
 - **The sibling `amrex` repo is the available AMReX source.** The build resolves AMReX from the sibling `amrex` checkout (or an equivalent AMReX install/source the build is pointed at); the headers under `amrex/Src/Base/` named above must be present and compilable in the CPU/double configuration.
+- **The library + suite compile under the CUDA and HIP backends (compile-only).** With AMReX configured for the CUDA backend (nvcc, a concrete `AMReX_CUDA_ARCH`) and for the HIP backend (an AMD HIP compiler, a concrete `AMReX_AMD_ARCH`), every library and suite translation unit compiles and links — proving the `AMREX_GPU_HOST_DEVICE`-qualified entry points and the `ParallelFor` launches are valid device code (no host-only calls, no missing qualifiers). Nothing executes under these builds: no GPU hardware is required or assumed, ctest is not run, and the CPU-only/double build above remains the sole correctness-bearing test target.
 
 ## Verification
 
@@ -62,7 +64,8 @@ A fresh agent confirms the build/integration contract is met by these self-conta
 2. **No Fortran/Matlab in the toolchain.** The build completes with only a C++ toolchain + AMReX + C++ HDF5 present; no Fortran compiler or Matlab is invoked at build or test time. Verified by building/running in an environment that has no Fortran/Matlab available.
 3. **`double` is preserved under a single-precision AMReX build.** With AMReX configured `amrex::Real = float`, the library's tables and entry points still use `double`, and the machine-precision exactness checks (affine-in-log, node identity) still pass at the `~1e-14` tier — proving the value type is pinned independently of `amrex::Real`.
 4. **AMReX source resolves.** The cited `amrex/Src/Base/AMReX_GpuContainers.H` header is present in the sibling `amrex` repo (or wherever the build is pointed) and compiles in the CPU/double configuration.
-5. **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, and that its cited `amrex/...` source-of-truth path resolves under `$AMREX_ROOT`.
+5. **CUDA and HIP compile checks pass.** On a GPU-toolchain host (no GPU hardware needed — e.g. a `nvidia/cuda:*-devel` or `rocm/dev-ubuntu-*` container), the library + full suite build to completion with the CUDA backend (nvcc, concrete arch) and with the HIP backend (AMD HIP compiler, concrete arch). ctest is **not** run under either; pass = clean compile + link.
+6. **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, and that its cited `amrex/...` source-of-truth path resolves under `$AMREX_ROOT`.
 
 ## Implementation freedom
 
@@ -70,11 +73,11 @@ A fresh agent confirms the build/integration contract is met by these self-conta
 - How AMReX is located/consumed (a submodule, a sibling-repo path, an installed `amrex` package, `find_package`/`add_subdirectory`), provided the CPU-only / double-precision configuration is used for the test target.
 - Which C++ HDF5 binding/API the reader uses (see `table-format-and-io.md`).
 - Whether the library is built static or shared, and how the suite's test targets are organized (see `regression-suite-design.md`).
-- Whether a GPU build is also offered (it is a drop-in via the same source), provided the CPU/double test target remains the gating build.
+- How the CUDA/HIP compile checks are provisioned (which container images, toolkit versions, and target architectures), provided each backend compiles the library + suite with a concrete architecture and the CPU/double test target remains the gating build.
 
 ## Open questions / assumptions
 
-- **CPU-only build is the test target (assumption, non-blocking).** No GPU is required or assumed in this environment; AMReX is built CPU-only / double precision and the suite runs on host. A GPU build is a drop-in (the qualifier macros and `ParallelFor` overloads switch to device forms), but GPU execution is not verified here. See `amrex-device-interface.md`.
+- **CPU-only build is the test target; GPU builds are compile-checked only (assumption, non-blocking).** No GPU hardware is required or assumed in this environment; AMReX is built CPU-only / double precision and the suite runs on host. The CUDA/HIP backends are verified as compile checks (the qualifier macros and `ParallelFor` overloads switch to device forms and must compile), but GPU *execution* is not verified anywhere. See `amrex-device-interface.md`.
 - **`amrex::Real` configuration (assumption, non-blocking).** The contract pins the value type to `double` independently of `amrex::Real`; if an AMReX build sets `amrex::Real = float`, the interpolator's tables and entry points still use `double`. This is a stated requirement the build must enforce, not a property AMReX guarantees.
 - **AMReX source location (assumption, non-blocking).** The sibling `amrex` repo is the available source in this environment; a build elsewhere may point at an installed AMReX or a different checkout. The contract is the CPU-only / double-precision configuration and the header surface above, not a specific path.
 - **No Fortran/Matlab toolchain (assumption, non-blocking).** This environment has no Fortran/Matlab build capability, and the contract requires none: the library is pure C++/AMReX. See `regression-suite-design.md`.
