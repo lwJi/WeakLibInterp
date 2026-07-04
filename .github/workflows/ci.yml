@@ -159,11 +159,16 @@ jobs:
     steps:
       # The dev image has the ROCm/HIP toolchain but not cmake/git/HDF5;
       # g++ supplies the libstdc++ headers amdclang++ compiles against.
+      # rocrand/rocprim/hiprand dev packages (from the image's ROCm apt repo)
+      # satisfy AMReX's HIP-backend find_package(rocrand/rocprim/hiprand)
+      # (amrex/Tools/CMake/AMReXParallelBackends.cmake:309-311); rocsparse is
+      # not needed because AMReX_LINEAR_SOLVERS is forced OFF.
       - name: Install toolchain
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates cmake g++ git libhdf5-dev
+            ca-certificates cmake g++ git libhdf5-dev \
+            rocrand-dev rocprim-dev hiprand-dev
 
       - name: Checkout WeakLibInterp
         uses: actions/checkout@v4

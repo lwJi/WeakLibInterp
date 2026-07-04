@@ -22,3 +22,13 @@ else()
   target_link_libraries(wli_lib PUBLIC ${HDF5_CXX_LIBRARIES})
   target_include_directories(wli_lib PUBLIC ${HDF5_INCLUDE_DIRS})
 endif()
+
+# The reader objects call HDF5 C API entry points (H5check_version, ...)
+# directly; the C++ bindings' DSO dependency on the C library does not put it
+# on the link line (default --no-copy-dt-needed-entries), so link the C
+# library explicitly and PUBLIC so every suite executable inherits it.
+if(TARGET hdf5::hdf5)
+  target_link_libraries(wli_lib PUBLIC hdf5::hdf5)
+else()
+  target_link_libraries(wli_lib PUBLIC ${HDF5_C_LIBRARIES})
+endif()

@@ -93,8 +93,12 @@ endfunction()
 # ---------------------------------------------------------------------------
 # HDF5 C++ library — found independently of AMReX (AMReX_HDF5 stays OFF to
 # avoid its parallel-HDF5 enforcement). Reading needs the C++ API, no Fortran.
+# The C component is requested explicitly: the reader objects reference C API
+# entry points (H5check_version, ...) directly, and linkers with default
+# --no-copy-dt-needed-entries refuse to resolve them through libhdf5_cpp's
+# transitive DSO — the C library must be on the link line itself.
 # ---------------------------------------------------------------------------
-find_package(HDF5 REQUIRED COMPONENTS CXX)
+find_package(HDF5 REQUIRED COMPONENTS C CXX)
 
 enable_testing()
 

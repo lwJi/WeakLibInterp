@@ -232,6 +232,15 @@ void test_comparator() {
         "cmp: machine tier rejects 1e-13");
 }
 
+// ------------------------------------------------------------------
+// 6. ln10 literal (wli_interp.H): the constexpr literal (nvcc cannot
+//    dynamically initialize device-visible globals) must be bit-identical
+//    to the runtime std::log the Fortran oracle's LOG(10) corresponds to.
+// ------------------------------------------------------------------
+void test_ln10_literal() {
+  check(wli::ln10 == std::log(Real(10)), "ln10: literal == std::log(10)");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -242,6 +251,7 @@ int main(int argc, char* argv[]) {
   test_boundary_extrapolation();
   test_nan_propagation();
   test_comparator();
+  test_ln10_literal();
 
   amrex::Finalize();
 
