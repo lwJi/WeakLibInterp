@@ -134,6 +134,18 @@ target_link_libraries(test_brem_point PRIVATE wli_lib)
 
 add_test(NAME brem_point COMMAND test_brem_point)
 
+# Host-level ParallelFor array-form wrappers over the 15 _Point kernels
+# (src/eos/wli_eos.H, wli_eos_inversion.H, src/opacity/wli_opacity_{emab_iso,
+# nes_pair,brem}.H; specs/amrex-device-interface.md:80-88,100-102). Asserts the
+# array form is bit-identical to a serial loop of the same _Point core and is
+# callable inside a ParallelFor lambda. Header-only synthetic tables, so links
+# only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_parallelfor_wrappers test_parallelfor_wrappers.cpp)
+
+target_link_libraries(test_parallelfor_wrappers PRIVATE wli_lib)
+
+add_test(NAME parallelfor_wrappers COMMAND test_parallelfor_wrappers)
+
 # EOS HDF5 reader structural-conformance self-test (src/io/wli_io_eos.H,
 # specs/table-format-and-io.md:171-175). Parses the committed h5ls snapshot and
 # asserts the reader's expected schema matches it; does NOT open any live .h5,
@@ -348,6 +360,7 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
   wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
   wli_add_mpi_ranks(brem_point             test_brem_point)
+  wli_add_mpi_ranks(parallelfor_wrappers   test_parallelfor_wrappers)
   wli_add_mpi_ranks(eos_reader_schema      test_eos_reader_schema)
   wli_add_mpi_ranks(opacity_reader_schema  test_opacity_reader_schema)
   wli_add_mpi_ranks(coverage_matrix        test_coverage_matrix)

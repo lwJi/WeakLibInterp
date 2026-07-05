@@ -12,11 +12,13 @@
 // (wli_opacity_nes_pair.H) there is NO symmetry fill: every (iE', iE) entry is
 // computed independently, in both energy triangles.
 
-#include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_Array.H>      // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_GpuLaunch.H>  // amrex::ParallelFor
 
 #include "wli_index.H"
 #include "wli_interp.H"
 #include "wli_real.H"
+#include "wli_table.H"  // wli::TableView<D>
 
 namespace wli {
 
@@ -128,6 +130,49 @@ Real BremInterpolateSingleVariable2D2DAlignedSummedPoint(
                           moment, nMom, OS, table);
   }
   return sum;
+}
+
+// ---------------------------------------------------------------------------
+// Host-level array (multi-point) launchers. Each owns ONE amrex::ParallelFor
+// over the matching _Point core; the flat 5D table + extents (nEp,nE,nMom,nD,nT
+// — rho BEFORE T, the Brem-specific axis order) are carried by a
+// wli::TableView<5>, the already-LOG10'd LogDs/LogTs grids, OS and the discrete
+// selectors (iEp,iE,moment) are batch-shared. For the single-density form only
+// LogD[p]/LogT[p] vary; for the summed form the per-species LogD[nSpecies] /
+// Alpha[nSpecies] / nSpecies stay batch-shared (the inner core loops species
+// internally) and only LogT[p] varies. Captured `[=]` by value, `noexcept`, no
+// allocation in the lambda (specs/amrex-device-interface.md:80-88).
+// ---------------------------------------------------------------------------
+
+// Array single-effective-density evaluate over BremInterpolateSingleDensity2DAlignedPoint.
+inline void BremInterpolateSingleDensity2DAligned(
+    int npoints, Real const* LogD, Real const* LogT, Real const* LogDs,
+    Real const* LogTs, int iEp, int iE, int moment, Real OS,
+    TableView<5> const& view, Real* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nD = view.n[3],
+            nT = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = BremInterpolateSingleDensity2DAlignedPoint(
+        LogD[p], LogT[p], LogDs, nD, LogTs, nT, iEp, iE, nEp, nE, moment, nMom,
+        OS, table);
+  });
+}
+
+// Array summed evaluate over BremInterpolateSingleVariable2D2DAlignedSummedPoint.
+// LogD[nSpecies]/Alpha[nSpecies]/nSpecies are batch-shared; only LogT[p] varies.
+inline void BremInterpolateSingleVariable2D2DAlignedSummed(
+    int npoints, Real const* LogD, Real const* Alpha, int nSpecies,
+    Real const* LogT, Real const* LogDs, Real const* LogTs, int iEp, int iE,
+    int moment, Real OS, TableView<5> const& view, Real* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nD = view.n[3],
+            nT = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = BremInterpolateSingleVariable2D2DAlignedSummedPoint(
+        LogD, Alpha, nSpecies, LogT[p], LogDs, nD, LogTs, nT, iEp, iE, nEp, nE,
+        moment, nMom, OS, table);
+  });
 }
 
 }  // namespace wli

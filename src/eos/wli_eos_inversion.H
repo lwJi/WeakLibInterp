@@ -32,16 +32,23 @@
 // `_Error` form (it returns the code); the bare-Real `_NoError` form forwards to
 // it and returns only .T, so T==0 is the sole failure signal (spec:108-111,
 // implementation freedom spec:162). The scalar DescribeEOSInversionError
-// code->string mapping is provided below (host-only diagnostic); the _Many array
-// form remains out of scope here.
+// code->string mapping is provided below (host-only diagnostic).
+//
+// Host-level array (_Many) forms live at the bottom of this file: free wli::
+// launchers that own one amrex::ParallelFor over the EosInversionResult-returning
+// family, consuming a wli::TableView<3> for the flat sub-table + extents. They
+// compose the untouched _Point wrappers — never duplicate the bisection math. The
+// describe-string mapping stays a host-only diagnostic with no array form.
 
 #include <cmath>
 
-#include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_Array.H>      // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_GpuLaunch.H>  // amrex::ParallelFor
 
 #include "wli_index.H"
 #include "wli_interp.H"
 #include "wli_real.H"
+#include "wli_table.H"  // wli::TableView<D>
 
 namespace wli {
 
@@ -420,7 +427,10 @@ Real ComputeTemperatureWith_DSY_Guess_NoError(
 //
 // HOST-ONLY BY DESIGN: unlike every other routine in this header, this is
 // intentionally NOT AMREX_GPU_HOST_DEVICE — it is a diagnostic string lookup,
-// not device math (spec/TODO sanctions host-side only). The oracle STOPs on
+// not device math (spec/TODO sanctions host-side only). The temperature-inversion
+// _Many array forms now exist (bottom of this file), but this describe-string
+// mapping deliberately has NO _Many form: it stays a host-only diagnostic outside
+// the device surface. The oracle STOPs on
 // codes > 13; a header-only diagnostic must stay side-effect-free, so we instead
 // return a fixed sentinel for any code outside the 7 valid ones (covers 4-9, 12,
 // and >13), keeping the function total.
@@ -436,6 +446,95 @@ const char* DescribeEOSInversionError(int Error) noexcept {
     case 13: return "Unable to Find Any Root";
     default: return "Invalid EOS Inversion Error Code";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Host-level array (_Many) launchers. Each owns ONE amrex::ParallelFor over the
+// matching EosInversionResult-returning family wrapper; the flat sub-table Xs
+// (pointer + extents nD,nT,nY) is carried by a wli::TableView<3>, the axis grids
+// Ds/Ts/Ys, OS and the EosInversionBounds b are batch-shared, and only the query
+// coordinates D[p]/X[p]/Y[p] (and, for the _Guess forms, the per-point guess
+// T_Guess[p]) vary per point. Captured `[=]` by value, `noexcept`, no allocation
+// in the lambda (specs/amrex-device-interface.md:80-88). npoints EosInversionResult
+// structs are written to out[] (T==0 with a non-zero Error signals failure).
+// ---------------------------------------------------------------------------
+
+inline void ComputeTemperatureWith_DEY_NoGuess_Many(
+    int npoints, Real const* D, Real const* E, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Es = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DEY_NoGuess(
+        D[p], E[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Es, b);
+  });
+}
+
+inline void ComputeTemperatureWith_DEY_Guess_Many(
+    int npoints, Real const* D, Real const* E, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, Real const* T_Guess, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Es = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DEY_Guess(
+        D[p], E[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Es, T_Guess[p], b);
+  });
+}
+
+inline void ComputeTemperatureWith_DPY_NoGuess_Many(
+    int npoints, Real const* D, Real const* P, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Ps = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DPY_NoGuess(
+        D[p], P[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Ps, b);
+  });
+}
+
+inline void ComputeTemperatureWith_DPY_Guess_Many(
+    int npoints, Real const* D, Real const* P, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, Real const* T_Guess, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Ps = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DPY_Guess(
+        D[p], P[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Ps, T_Guess[p], b);
+  });
+}
+
+inline void ComputeTemperatureWith_DSY_NoGuess_Many(
+    int npoints, Real const* D, Real const* S, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Ss = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DSY_NoGuess(
+        D[p], S[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Ss, b);
+  });
+}
+
+inline void ComputeTemperatureWith_DSY_Guess_Many(
+    int npoints, Real const* D, Real const* S, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, Real const* T_Guess, EosInversionBounds const& b,
+    EosInversionResult* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* Ss = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = ComputeTemperatureWith_DSY_Guess(
+        D[p], S[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, Ss, T_Guess[p], b);
+  });
 }
 
 }  // namespace wli

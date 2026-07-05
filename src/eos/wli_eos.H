@@ -25,14 +25,18 @@
 // (spec:94-99). The value type is wli::Real (= double) throughout, never
 // amrex::Real.
 //
-// Multi-point/array forms are out of scope here; they will reuse this same
-// corner gather + wli::TriLinear kernel later.
+// Host-level array (multi-point) forms live at the bottom of this file: free
+// wli:: launchers that own one amrex::ParallelFor over the _Point cores above,
+// consuming a wli::TableView<3> for the flat table + extents. They compose the
+// untouched _Point kernels — never duplicate the corner gather / TriLinear math.
 
-#include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_Array.H>       // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_GpuLaunch.H>   // amrex::ParallelFor
 
 #include "wli_index.H"
 #include "wli_interp.H"
 #include "wli_real.H"
+#include "wli_table.H"  // wli::TableView<D>
 
 namespace wli {
 
@@ -145,6 +149,41 @@ EosPointDeriv EosInterpolateDifferentiateSingleVariable3DPoint(
       dTriLineardX3(p000, p100, p010, p110, p001, p101, p011, p111, dD, dT);
 
   return EosPointDeriv{value, dDrho, dDT, dDY};
+}
+
+// ---------------------------------------------------------------------------
+// Host-level array (multi-point) launchers. Each owns ONE amrex::ParallelFor
+// over the matching _Point core; the table (flat pointer + extents nD,nT,nY) is
+// carried by a wli::TableView<3>, the axis grids Ds/Ts/Ys and OS are batch-
+// shared scalars/pointers, and only the query coordinates D[p]/T[p]/Y[p] vary
+// per point. Captured `[=]` by value, `noexcept`, no allocation in the lambda
+// (specs/amrex-device-interface.md:80-88). npoints results are written to out[].
+// ---------------------------------------------------------------------------
+
+// Array evaluate: out[p] = EosInterpolateSingleVariable3DPoint(D[p],T[p],Y[p]).
+inline void EosInterpolateSingleVariable3D(
+    int npoints, Real const* D, Real const* T, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, Real* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = EosInterpolateSingleVariable3DPoint(
+        D[p], T[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, table);
+  });
+}
+
+// Array evaluate-and-differentiate: out[p] = the {value,dDrho,dDT,dDY} struct.
+inline void EosInterpolateDifferentiateSingleVariable3D(
+    int npoints, Real const* D, Real const* T, Real const* Y,
+    Real const* Ds, Real const* Ts, Real const* Ys, Real OS,
+    TableView<3> const& view, EosPointDeriv* out) noexcept {
+  int const nD = view.n[0], nT = view.n[1], nY = view.n[2];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = EosInterpolateDifferentiateSingleVariable3DPoint(
+        D[p], T[p], Y[p], Ds, nD, Ts, nT, Ys, nY, OS, table);
+  });
 }
 
 }  // namespace wli

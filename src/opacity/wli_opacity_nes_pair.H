@@ -13,11 +13,13 @@
 
 #include <cmath>  // std::exp (NES detailed-balance Boltzmann factor)
 
-#include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_Array.H>      // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_GpuLaunch.H>  // amrex::ParallelFor
 
 #include "wli_index.H"
 #include "wli_interp.H"
 #include "wli_real.H"
+#include "wli_table.H"  // wli::TableView<D>
 
 namespace wli {
 
@@ -164,6 +166,64 @@ Real PairCrossingSymmetryFillPoint(
   return NESPairInterpolateSingleVariable2D2DAlignedPoint(
       LogT, LogX, LogTs, nT, LogXs, nEta, iE, iEp, nEp, nE, kernelSwapped, nMom,
       OS, table);
+}
+
+// ---------------------------------------------------------------------------
+// Host-level array (multi-point) launchers. Each owns ONE amrex::ParallelFor
+// over the matching _Point core; the flat 5D table + extents (nEp,nE,nMom,nT,
+// nEta) are carried by a wli::TableView<5>, the already-LOG10'd LogTs/LogXs
+// grids, OS and the discrete selectors (iEp,iE,kernel) — plus (NES) the physical
+// energies E[] and temperature T — are batch-shared, and only the query
+// coordinates LogT[p]/LogX[p] vary per point. Captured `[=]` by value,
+// `noexcept`, no allocation in the lambda (specs/amrex-device-interface.md:80-88).
+// The wrapper batches over query points at a FIXED energy selector; the
+// triangular energy loop / applicability domain stays a caller concern.
+// ---------------------------------------------------------------------------
+
+// Array aligned NES/Pair evaluate over NESPairInterpolateSingleVariable2D2DAlignedPoint.
+inline void NESPairInterpolateSingleVariable2D2DAligned(
+    int npoints, Real const* LogT, Real const* LogX, Real const* LogTs,
+    Real const* LogXs, int iEp, int iE, int kernel, Real OS,
+    TableView<5> const& view, Real* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nT = view.n[3],
+            nEta = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = NESPairInterpolateSingleVariable2D2DAlignedPoint(
+        LogT[p], LogX[p], LogTs, nT, LogXs, nEta, iEp, iE, nEp, nE, kernel, nMom,
+        OS, table);
+  });
+}
+
+// Array NES detailed-balance fill over NESDetailedBalanceFillPoint. E[] and T are
+// PHYSICAL (MeV), batch-shared; only LogT[p]/LogX[p] vary per point.
+inline void NESDetailedBalanceFill(
+    int npoints, Real const* LogT, Real const* LogX, Real const* LogTs,
+    Real const* LogXs, int iEp, int iE, int kernel, Real OS,
+    TableView<5> const& view, Real const* E, Real T, Real* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nT = view.n[3],
+            nEta = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = NESDetailedBalanceFillPoint(
+        LogT[p], LogX[p], LogTs, nT, LogXs, nEta, iEp, iE, nEp, nE, kernel, nMom,
+        OS, table, E, T);
+  });
+}
+
+// Array Pair crossing-symmetry fill over PairCrossingSymmetryFillPoint (no E/T).
+inline void PairCrossingSymmetryFill(
+    int npoints, Real const* LogT, Real const* LogX, Real const* LogTs,
+    Real const* LogXs, int iEp, int iE, int kernelSwapped, Real OS,
+    TableView<5> const& view, Real* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nT = view.n[3],
+            nEta = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = PairCrossingSymmetryFillPoint(
+        LogT[p], LogX[p], LogTs, nT, LogXs, nEta, iEp, iE, nEp, nE, kernelSwapped,
+        nMom, OS, table);
+  });
 }
 
 }  // namespace wli
