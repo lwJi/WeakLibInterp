@@ -33,8 +33,9 @@ Open any single spec file in isolation: it is self-contained. The two cross-cutt
 | [opacity-brem](./opacity-brem.md) | Brem 5D `(E',E,moment,ρ,T)` channel; `[1,1,28/3]` effective-density decomposition; no symmetry fill; `_2D2D_Custom_Aligned` summed consumer path. | committed |
 | [regression-suite-design](./regression-suite-design.md) | The self-contained regression scheme as a runnable coverage matrix over every public device entry point × {in-bounds, on-edge, out-of-range, NaN-input} × {synthetic + named tables}; tolerance tiers; assert-against-tolerance pass/fail; C++/AMReX-only. | committed |
 | [build-integration](./build-integration.md) | AMReX as a required CPU-only / double-precision dependency linked by the library + suite; value type pinned to `double` regardless of `amrex::Real`; no Fortran/Matlab build or runtime dependency; compile-only CUDA/HIP backend checks (no GPU execution). | committed |
+| [cactus-integration](./cactus-integration.md) | Cactus / Einstein Toolkit delivery: an in-repo ExternalLibraries-style thorn that builds the library via its own CMake against the ET-provided AMReX install (exactly one AMReX per executable); `find_package(AMReX)` consumption mode + configure-time configuration-consistency guard; consumers need only `REQUIRES WeakLibInterp`. | committed |
 
-All 10 specs are committed and linked above. The validator (`tools/validate_specs.sh`) enforces that the README links **exactly** these 10 spec files — no orphan spec files on disk, no missing links, no broken links — and that the `regression-suite-design` coverage matrix references every leaf spec's public entry points (the closure check). Coverage grows by registry append in `tools/validate_specs.sh`.
+All 11 specs are committed and linked above. The validator (`tools/validate_specs.sh`) enforces that the README links **exactly** these 11 spec files — no orphan spec files on disk, no missing links, no broken links — and that the `regression-suite-design` coverage matrix references every leaf spec's public entry points (the closure check). Coverage grows by registry append in `tools/validate_specs.sh`.
 
 ## Validating the spec set
 
