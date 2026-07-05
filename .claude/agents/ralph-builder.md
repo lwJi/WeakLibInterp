@@ -20,7 +20,7 @@ Write full test output to `build.log`. Write the distilled `build.md` with exact
 ## Tests run     (names + pass/fail each; required tests from the task definition)
 ## Failures      (each: test → ≤8-line error excerpt → suspected file:line. Empty if PASS)
 ## Changes       (file:line list of what was implemented; no code blocks)
-## Notes         (anything the orchestrator must know; proposed @TODO.md deltas; if you established or corrected a build/test command, state the exact invocation so the orchestrator can record it in @CLAUDE.md)
+## Notes         (anything the orchestrator must know; proposed @TODO.md deltas; if you established or corrected a build/test command, or established/moved where shared code lives, state the exact invocation/location so the orchestrator can record it in @CLAUDE.md)
 ```
 
 ## Discipline
