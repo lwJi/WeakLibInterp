@@ -210,6 +210,46 @@ add_test(NAME production_tables COMMAND test_production_tables)
 
 set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
 
+# MPI root-read + broadcast tests (specs/table-format-and-io.md:183-184). One
+# executable, two modes: "open" (non-root ranks never open the .h5; loads are
+# byte-identical across ranks) and "fail" (root-side open failure surfaces as
+# the same error on every rank, no hang). MPI-only: the executable returns 77
+# (CTest SKIP) outside an MPI build, so the default build/ suite stays green.
+# It writes a synthetic .h5 (test-only) and calls the live readers, so it links
+# the HDF5 C++ bindings + C library exactly like test_production_tables.
+add_executable(test_mpi_root_bcast test_mpi_root_bcast.cpp)
+
+target_link_libraries(test_mpi_root_bcast PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_mpi_root_bcast PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_mpi_root_bcast PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_mpi_root_bcast PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_mpi_root_bcast PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+# These MUST run at >= 2 ranks, so register a custom multi-rank COMMAND that
+# bypasses the global 1-rank CMAKE_TEST_LAUNCHER. In a non-MPI build there is no
+# MPI launcher and the executable itself returns 77 (SKIP); register it plainly
+# so the default build/ suite still lists (and skips) the tests.
+if(WLI_AMREX_MPI)
+  add_test(NAME mpi_root_open
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> open)
+  add_test(NAME mpi_root_open_failure
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> fail)
+else()
+  add_test(NAME mpi_root_open COMMAND test_mpi_root_bcast open)
+  add_test(NAME mpi_root_open_failure COMMAND test_mpi_root_bcast fail)
+endif()
+
+set_tests_properties(mpi_root_open mpi_root_open_failure
+  PROPERTIES SKIP_RETURN_CODE 77)
+
 # Compile-check backends (WLI_GPU_BACKEND=CUDA/HIP): compile every suite
 # executable with the device compiler so the ParallelFor launches and device
 # kernels in the tests are compile-checked too; no-op for the gating NONE

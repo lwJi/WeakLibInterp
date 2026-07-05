@@ -25,6 +25,8 @@
 #include <string>
 #include <vector>
 
+#include <AMReX.H>
+
 #include "wli_compare.H"
 #include "wli_eos.H"
 #include "wli_io_eos.H"
@@ -205,7 +207,10 @@ bool one(const std::string& root, const char* base, F&& runner) {
 
 }  // namespace
 
-int main() {
+// The reader logic. Bracketed by amrex::Initialize/Finalize in main() because,
+// under an MPI build, the readers' ParallelDescriptor::Bcast runs on AMReX's
+// communicator, which requires AMReX to be initialized (spec:171 precondition).
+int run() {
   const char* rootEnv = std::getenv("WL_TABLES_ROOT");
   if (rootEnv == nullptr || rootEnv[0] == '\0') {
     std::printf(
@@ -242,4 +247,11 @@ int main() {
   std::printf("PASS production_tables: %d/6 named tables present, all cells ok\n",
               present);
   return EXIT_SUCCESS;
+}
+
+int main(int argc, char** argv) {
+  amrex::Initialize(argc, argv);
+  const int rc = run();
+  amrex::Finalize();
+  return rc;
 }
