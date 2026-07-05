@@ -31,8 +31,9 @@
 // Reporting matrix: the struct-returning EosInversionResult{T,Error} form IS the
 // `_Error` form (it returns the code); the bare-Real `_NoError` form forwards to
 // it and returns only .T, so T==0 is the sole failure signal (spec:108-111,
-// implementation freedom spec:162). The _Many array form and the
-// DescribeEOSInversionError string table remain out of scope here.
+// implementation freedom spec:162). The scalar DescribeEOSInversionError
+// code->string mapping is provided below (host-only diagnostic); the _Many array
+// form remains out of scope here.
 
 #include <cmath>
 
@@ -411,6 +412,30 @@ Real ComputeTemperatureWith_DSY_Guess_NoError(
   return ComputeTemperatureWith_DSY_Guess(D, S, Y, Ds, nD, Ts, nT, Ys, nY, OS,
                                           Ss, T_Guess, b)
       .T;
+}
+
+// Map an EOS inversion error code to a human-readable description (oracle
+// DescribeEOSInversionError, wlEOSInversionModule.F90:230-250; spec:94-106).
+// Verbatim oracle strings for the 7 valid codes {0,1,2,3,10,11,13}.
+//
+// HOST-ONLY BY DESIGN: unlike every other routine in this header, this is
+// intentionally NOT AMREX_GPU_HOST_DEVICE — it is a diagnostic string lookup,
+// not device math (spec/TODO sanctions host-side only). The oracle STOPs on
+// codes > 13; a header-only diagnostic must stay side-effect-free, so we instead
+// return a fixed sentinel for any code outside the 7 valid ones (covers 4-9, 12,
+// and >13), keeping the function total.
+AMREX_FORCE_INLINE
+const char* DescribeEOSInversionError(int Error) noexcept {
+  switch (Error) {
+    case 0:  return "Returned Successfully";
+    case 1:  return "First Argument (D) Outside Table Bounds";
+    case 2:  return "Second Argument (E, P, or S) Outside Table Bounds";
+    case 3:  return "Third Argument (Y) Outside Table Bounds";
+    case 10: return "EOS Inversion Not Initialized";
+    case 11: return "NAN in Argument(s)";
+    case 13: return "Unable to Find Any Root";
+    default: return "Invalid EOS Inversion Error Code";
+  }
 }
 
 }  // namespace wli

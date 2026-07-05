@@ -41,10 +41,10 @@ Current state: the serial CPU-only contract from the previous plan cycle is full
 
 ## Tier 6 — Residual pre-MPI gaps
 
-- [ ] `DescribeEOSInversionError` code→string mapping
+- [x] `DescribeEOSInversionError` code→string mapping
   - spec: eos-inversion.md — acceptance source of truth (§:12,34,94-106,110)
   - tests: each of the 7 error codes {0,01,02,03,10,11,13} maps to its expected description string.
-  - notes: the only named source-of-truth routine with zero C++ counterpart; `src/eos/wli_eos_inversion.H:35` currently marks it out of scope but the spec text lists it as in-scope — implement (host-side is fine; it is diagnostic, not device math). Oracle `wlEOSInversionModule.F90:230-250`.
+  - notes: DONE — host-only `inline const char* DescribeEOSInversionError(int)` at `src/eos/wli_eos_inversion.H:404-425` (switch over the 7 valid codes, deliberately NOT `AMREX_GPU_HOST_DEVICE`; stale scope comment at `:36` revised — only the `_Many` array form remains deferred). Strings are byte-for-byte the oracle's (`wlEOSInversionModule.F90:238-244`); spec's "Meaning" column paraphrases — verbatim oracle text governs. Documented divergence: oracle STOPs on Error>13, C++ returns fixed sentinel `"Invalid EOS Inversion Error Code"` for any undefined code (4-9, 12, >13) to keep the header-only diagnostic total/side-effect-free. Test `test/test_eos_inversion_describe.cpp` (9 checks: 7 valid + 2 sentinel), registered at `test/CMakeLists.txt:75-82` + `wli_add_mpi_ranks` at `:343`.
 
 - [ ] Production-table kernel parity: Iso/NES/Pair/Brem live cells + EOS inversion round-trip
   - spec: opacity-emab-iso.md, opacity-nes-pair.md (§:140), opacity-brem.md, eos-inversion.md (§:146) — production parity `rtol=1e-12, atol=1e-30`

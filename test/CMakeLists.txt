@@ -72,6 +72,14 @@ target_link_libraries(test_eos_inversion_family PRIVATE wli_lib)
 
 add_test(NAME eos_inversion_family COMMAND test_eos_inversion_family)
 
+# DescribeEOSInversionError code->string mapping (src/eos/wli_eos_inversion.H,
+# specs/eos-inversion.md:94-106). Header-only, so links only wli_lib; no HDF5.
+add_executable(test_eos_inversion_describe test_eos_inversion_describe.cpp)
+
+target_link_libraries(test_eos_inversion_describe PRIVATE wli_lib)
+
+add_test(NAME eos_inversion_describe COMMAND test_eos_inversion_describe)
+
 # EmAb single-point 4D evaluate kernel (src/opacity/wli_opacity_emab_iso.H,
 # specs/opacity-emab-iso.md). Header-only, synthetic table, so links only
 # wli_lib (AMReX CPU/double); no HDF5 needed.
@@ -333,6 +341,7 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(eos_diff_point         test_eos_diff_point)
   wli_add_mpi_ranks(eos_inversion_dey      test_eos_inversion_dey)
   wli_add_mpi_ranks(eos_inversion_family   test_eos_inversion_family)
+  wli_add_mpi_ranks(eos_inversion_describe test_eos_inversion_describe)
   wli_add_mpi_ranks(emab_point             test_emab_point)
   wli_add_mpi_ranks(iso_point              test_iso_point)
   wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
