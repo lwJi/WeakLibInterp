@@ -18,6 +18,11 @@
 //   7. Highest-T vs nearest-to-guess root selection on a NON-monotone-in-log-T
 //      sub-table: NoGuess picks the higher-T root, Guess (guess near the low-T
 //      root) picks the low-T root.
+//   8. Code 13 on a genuinely FLAT-in-T (constant column) sub-table (spec:149):
+//      every T-face at a fixed (rho,Ye) holds the identical value, so an
+//      in-bounds X != that constant yields no sign-change bracket at any node =>
+//      code 13, T==0, through BOTH wrappers (distinct degenerate-flat path vs
+//      Check 6's monotone-column-unreachable path).
 //
 // Hand-rolled harness (no GoogleTest/Catch2), synthetic tables only (no HDF5),
 // mirroring test/test_eos_point.cpp. No amrex::Initialize: pure host scalar math.
@@ -275,6 +280,58 @@ int main() {
       std::fprintf(stderr, "  (non-monotone: NoGuess {%d,%g} Guess {%d,%g})\n",
                    rn.Error, rn.T, rg.Error, rg.T);
     check(ok, "highest-T (NoGuess) vs nearest-to-guess (Guess) root selection");
+  }
+
+  // --- Check 8: code 13 on a genuinely FLAT-in-T (constant column) table. ---
+  {
+    // A degenerate sub-table constant in T at every (rho,Ye) node: the kC*log10(T)
+    // term of `affine` is dropped, so every T-face at a fixed (D,Y) holds the
+    // identical constant X0(D,Y). Distinct (D,Y) still give distinct X0, so the
+    // global MinX..MaxX spans a real range. Probing an in-bounds X strictly
+    // different from the column constant makes f_a*f_b = (X-X0)^2 > 0 at every
+    // node => no bracket => the full-range non-bracket / degenerate-flat code-13
+    // site fires (NoGuess post-scan; Guess no-root exit) -- distinct from Check
+    // 6's monotone-column path. TRAP avoided: X == X0 would instead take the
+    // bisection branch and yield NaN via InverseLogInterp 0/0, NOT code 13.
+    std::vector<Real> Esf(static_cast<std::size_t>(nD) * nT * nY);
+    for (int iY = 0; iY < nY; ++iY)
+      for (int iT = 0; iT < nT; ++iT)
+        for (int iD = 0; iD < nD; ++iD)
+          Esf[idx(iD, iT, iY)] =
+              kA + kB * std::log10(Ds[iD]) + kE * Ys[iY];  // no kC*log10(T) term
+    const Real* Esfd = Esf.data();
+
+    wli::EosInversionBounds bf;
+    bf.MinD = Ds[0];
+    bf.MaxD = Ds[nD - 1];
+    bf.MinY = Ys[0];
+    bf.MaxY = Ys[nY - 1];
+    {
+      Real lo = wli::recover(Esf[0], kOS), hi = lo;
+      for (std::size_t k = 0; k < Esf.size(); ++k) {
+        Real v = wli::recover(Esf[k], kOS);
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      bf.MinX = lo;
+      bf.MaxX = hi;
+    }
+    bf.initialized = true;
+
+    Real D = 7.3e6, Y = 0.22;             // interior, off-node
+    Real X0 = forward(D, 6.0, Y, Esfd);   // the flat column constant (any T)
+    Real Xlo = bf.MinX + Real(0.1) * (bf.MaxX - bf.MinX);
+    Real Xhi = bf.MinX + Real(0.9) * (bf.MaxX - bf.MinX);
+    // Pick whichever interior probe is farther from X0 => guaranteed X != X0.
+    Real X = (std::fabs(Xhi - X0) >= std::fabs(Xlo - X0)) ? Xhi : Xlo;
+    bool in_bounds = (X >= bf.MinX && X <= bf.MaxX && X != X0);
+    auto rn = wli::ComputeTemperatureWith_DEY_NoGuess(D, X, Y, Ds, nD, Ts, nT, Ys,
+                                                      nY, kOS, Esfd, bf);
+    auto rg = wli::ComputeTemperatureWith_DEY_Guess(
+        D, X, Y, Ds, nD, Ts, nT, Ys, nY, kOS, Esfd, 6.0, bf);
+    check(in_bounds && rn.Error == 13 && rn.T == Real(0) && rg.Error == 13 &&
+              rg.T == Real(0),
+          "code 13 flat-in-T degenerate column, both wrappers (== and T==0)");
   }
 
   if (g_failures != 0) {
