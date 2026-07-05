@@ -45,14 +45,19 @@
 // (EmAb) or 2D Offsets[nOpacities,nMoments] (Iso) by species[/moment] before the
 // call (spec:74). No offset array or species index is threaded into this leaf.
 //
-// Multi-point/array forms (ParallelFor over this _Point core) are out of scope
-// here; they will reuse this same 16-corner gather + wli::TetraLinear kernel.
+// Host-level array (multi-point) forms live at the bottom of this file: free
+// wli:: launchers that own one amrex::ParallelFor over the _Point cores above,
+// consuming a wli::TableView<4> (EmAb) / wli::TableView<5> (Iso) for the flat
+// table + extents. They compose the untouched _Point kernels — never duplicate
+// the 16-corner gather / TetraLinear math.
 
-#include <AMReX_Array.H>  // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_Array.H>      // AMREX_GPU_HOST_DEVICE / AMREX_FORCE_INLINE / GpuArray
+#include <AMReX_GpuLaunch.H>  // amrex::ParallelFor
 
 #include "wli_index.H"
 #include "wli_interp.H"
 #include "wli_real.H"
+#include "wli_table.H"  // wli::TableView<D>
 
 namespace wli {
 
@@ -180,6 +185,46 @@ Real IsoInterpolateSingleVariable5DPoint(
                   p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
                   dE, dD, dT, dY);
   return recover(f, OS);
+}
+
+// ---------------------------------------------------------------------------
+// Host-level array (multi-point) launchers. Each owns ONE amrex::ParallelFor
+// over the matching _Point core; the flat table + extents are carried by a
+// wli::TableView<D> (EmAb: 4D (nE,nD,nT,nY); Iso: 5D (nE,nMom,nD,nT,nY)), the
+// already-LOG10'd axis grids, OS and (Iso) the discrete moment selector iMom are
+// batch-shared, and only the query coordinates LogE[p]/LogD[p]/LogT[p]/Y[p] vary
+// per point. Captured `[=]` by value, `noexcept`, no allocation in the lambda
+// (specs/amrex-device-interface.md:80-88). npoints results written to out[].
+// ---------------------------------------------------------------------------
+
+// Array EmAb evaluate over EmAbInterpolateSingleVariable4DPoint.
+inline void EmAbInterpolateSingleVariable4D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, Real OS, TableView<4> const& view, Real* out) noexcept {
+  int const nE = view.n[0], nD = view.n[1], nT = view.n[2], nY = view.n[3];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = EmAbInterpolateSingleVariable4DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        OS, table);
+  });
+}
+
+// Array Iso evaluate over IsoInterpolateSingleVariable5DPoint at fixed iMom.
+inline void IsoInterpolateSingleVariable5D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, int iMom, Real OS, TableView<5> const& view,
+    Real* out) noexcept {
+  int const nE = view.n[0], nMom = view.n[1], nD = view.n[2], nT = view.n[3],
+            nY = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = IsoInterpolateSingleVariable5DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        iMom, nMom, OS, table);
+  });
 }
 
 }  // namespace wli

@@ -21,10 +21,12 @@
 
 #include "wli_io_opacity.H"
 
+#include <memory>
 #include <stdexcept>
 
 #include <H5Cpp.h>
 
+#include "wli_io_bcast_detail.H"  // root-read + MPI broadcast primitives
 #include "wli_io_hdf5_detail.H"  // shared read primitives (no ad-hoc copy)
 
 namespace wli {
@@ -86,13 +88,65 @@ HostOpacityCommon read_common(const H5::H5File& f) {
   return c;
 }
 
+// ---------------------------------------------------------------------------
+// Broadcast helpers (spec:170-171). Fixed-size metadata first, then arrays.
+// The gating flag precedes its conditionally-sized array (e.g. `geometric`
+// before edge/width, so non-root allocates the same optional fields).
+// ---------------------------------------------------------------------------
+
+void bcast_grid(HostOpacityGrid& g) {
+  detail::bcast_string(g.name);
+  detail::bcast_axis_kind(g.kind);
+  detail::bcast_vector(g.points);
+  detail::bcast_flag(g.geometric);      // gate BEFORE the geometric extras
+  detail::bcast_scalar(g.zoom);
+  detail::bcast_vector(g.edge);
+  detail::bcast_vector(g.width);
+  detail::bcast_scalar(g.minEdge);
+  detail::bcast_scalar(g.maxEdge);
+  detail::bcast_scalar(g.minWidth);
+}
+
+void bcast_common(HostOpacityCommon& c) {
+  bcast_grid(c.energyGrid);
+  detail::bcast_thermo_state(c.axes, c.tsIndices);
+}
+
+// Distribute a HostTable from root to every rank: broadcast status FIRST
+// (collective failure, no hang), then the metadata + arrays via bcast_fn. The
+// root-only serial read (read_fn) may throw; that maps to status=0.
+template <typename HostTable, typename ReadFn, typename BcastFn>
+HostTable root_read_and_bcast(const std::string& path, ReadFn read_fn,
+                              BcastFn bcast_fn) {
+  HostTable t;
+  int status = 1;  // 1 = ok, 0 = root-side open/read failure
+  if (detail::io_is_root()) {
+    try {
+      H5::Exception::dontPrint();
+      std::unique_ptr<H5::H5File> filePtr = detail::root_open(path);
+      read_fn(*filePtr, t);
+    } catch (H5::Exception&) {
+      status = 0;
+    } catch (std::exception&) {
+      status = 0;
+    }
+  }
+  detail::bcast_status(status);
+  if (status == 0) {
+    throw std::runtime_error(
+        "wli::io: I/O root failed to open/read '" + path + "'");
+  }
+  bcast_fn(t);
+  return t;
+}
+
 }  // namespace
 
-HostEmAbTable read_emab_table(const std::string& path) {
-  H5::Exception::dontPrint();
-  H5::H5File file(path, H5F_ACC_RDONLY);
+namespace {
 
-  HostEmAbTable t;
+// ---- EmAb -----------------------------------------------------------------
+
+void read_emab_root(const H5::H5File& file, HostEmAbTable& t) {
   t.common = read_common(file);
 
   // Legacy fallback: open /EmAb if present, else /EmAb_CorrectedAbsorption.
@@ -118,14 +172,26 @@ HostEmAbTable read_emab_table(const std::string& path) {
 
   t.hasEmAbParameters = file.nameExists("/EmAb Parameters");
   t.hasECTable = file.nameExists("/EC_table");
-  return t;
 }
 
-HostScatIsoTable read_scat_iso_table(const std::string& path) {
-  H5::Exception::dontPrint();
-  H5::H5File file(path, H5F_ACC_RDONLY);
+void bcast_emab(HostEmAbTable& t) {
+  bcast_common(t.common);
+  detail::bcast_flag(t.usedLegacyGroup);
+  detail::bcast_scalar(t.nOpacities);
+  detail::bcast_array(t.nPoints);
+  detail::bcast_strings(t.speciesNames);
+  detail::bcast_vector(t.offset);
+  if (!detail::io_is_root()) {
+    t.values.resize(t.speciesNames.size());
+  }
+  for (auto& v : t.values) detail::bcast_vector(v);
+  detail::bcast_flag(t.hasEmAbParameters);
+  detail::bcast_flag(t.hasECTable);
+}
 
-  HostScatIsoTable t;
+// ---- Iso ------------------------------------------------------------------
+
+void read_iso_root(const H5::H5File& file, HostScatIsoTable& t) {
   t.common = read_common(file);
 
   const std::string group = "/Scat_Iso_Kernels";
@@ -144,17 +210,25 @@ HostScatIsoTable read_scat_iso_table(const std::string& path) {
   for (const std::string& s : t.speciesNames) {
     t.values.push_back(detail::read_double(file, group + "/" + s));  // log-stored
   }
-  return t;
 }
 
-// Shared NES/Pair reader (identical layout; caller passes the channel group).
-namespace {
-HostScatNESPairTable read_scat_nes_pair(const std::string& path,
-                                        const std::string& group) {
-  H5::Exception::dontPrint();
-  H5::H5File file(path, H5F_ACC_RDONLY);
+void bcast_iso(HostScatIsoTable& t) {
+  bcast_common(t.common);
+  detail::bcast_scalar(t.nOpacities);
+  detail::bcast_scalar(t.nMoments);
+  detail::bcast_array(t.nPoints);
+  detail::bcast_strings(t.speciesNames);
+  detail::bcast_vector(t.offset);
+  if (!detail::io_is_root()) {
+    t.values.resize(t.speciesNames.size());
+  }
+  for (auto& v : t.values) detail::bcast_vector(v);
+}
 
-  HostScatNESPairTable t;
+// ---- NES / Pair (shared layout) -------------------------------------------
+
+void read_nes_pair_root(const H5::H5File& file, const std::string& group,
+                        HostScatNESPairTable& t) {
   t.common = read_common(file);
   t.etaGrid = read_grid(file, "/EtaGrid");
 
@@ -169,24 +243,23 @@ HostScatNESPairTable read_scat_nes_pair(const std::string& path,
   t.nPoints = fortran_shape<5>(file, group + "/Kernels");
   t.kernels = detail::read_double(file, group + "/Kernels");  // log-stored
   t.hasNPS = file.nameExists(group + "/NPS");
-  return t;
-}
-}  // namespace
-
-HostScatNESPairTable read_scat_nes_table(const std::string& path) {
-  return read_scat_nes_pair(path, "/Scat_NES_Kernels");
 }
 
-HostScatNESPairTable read_scat_pair_table(const std::string& path) {
-  return read_scat_nes_pair(path, "/Scat_Pair_Kernels");
+void bcast_nes_pair(HostScatNESPairTable& t) {
+  bcast_common(t.common);
+  bcast_grid(t.etaGrid);
+  detail::bcast_scalar(t.nOpacities);
+  detail::bcast_scalar(t.nMoments);
+  detail::bcast_array(t.nPoints);
+  detail::bcast_vector(t.offset);
+  detail::bcast_vector(t.kernels);
+  detail::bcast_flag(t.hasNPS);
 }
 
-HostScatBremTable read_scat_brem_table(const std::string& path) {
-  H5::Exception::dontPrint();
-  H5::H5File file(path, H5F_ACC_RDONLY);
+// ---- Brem -----------------------------------------------------------------
 
-  HostScatBremTable t;
-  t.common = read_common(file);  // Brem has /EnergyGrid + /ThermoState, no /EtaGrid
+void read_brem_root(const H5::H5File& file, HostScatBremTable& t) {
+  t.common = read_common(file);  // Brem: /EnergyGrid + /ThermoState, no /EtaGrid
 
   const std::string group = "/Scat_Brem_Kernels";
   t.nOpacities = detail::read_int_scalar(file, group + "/nOpacities");
@@ -200,7 +273,56 @@ HostScatBremTable read_scat_brem_table(const std::string& path) {
   // The Brem value array is named S_sigma (not Kernels).
   t.nPoints = fortran_shape<5>(file, group + "/S_sigma");
   t.sSigma = detail::read_double(file, group + "/S_sigma");  // log-stored
-  return t;
+}
+
+void bcast_brem(HostScatBremTable& t) {
+  bcast_common(t.common);
+  detail::bcast_scalar(t.nOpacities);
+  detail::bcast_scalar(t.nMoments);
+  detail::bcast_array(t.nPoints);
+  detail::bcast_vector(t.offset);
+  detail::bcast_vector(t.sSigma);
+}
+
+}  // namespace
+
+HostEmAbTable read_emab_table(const std::string& path) {
+  return root_read_and_bcast<HostEmAbTable>(
+      path,
+      [](const H5::H5File& f, HostEmAbTable& t) { read_emab_root(f, t); },
+      [](HostEmAbTable& t) { bcast_emab(t); });
+}
+
+HostScatIsoTable read_scat_iso_table(const std::string& path) {
+  return root_read_and_bcast<HostScatIsoTable>(
+      path,
+      [](const H5::H5File& f, HostScatIsoTable& t) { read_iso_root(f, t); },
+      [](HostScatIsoTable& t) { bcast_iso(t); });
+}
+
+HostScatNESPairTable read_scat_nes_table(const std::string& path) {
+  return root_read_and_bcast<HostScatNESPairTable>(
+      path,
+      [](const H5::H5File& f, HostScatNESPairTable& t) {
+        read_nes_pair_root(f, "/Scat_NES_Kernels", t);
+      },
+      [](HostScatNESPairTable& t) { bcast_nes_pair(t); });
+}
+
+HostScatNESPairTable read_scat_pair_table(const std::string& path) {
+  return root_read_and_bcast<HostScatNESPairTable>(
+      path,
+      [](const H5::H5File& f, HostScatNESPairTable& t) {
+        read_nes_pair_root(f, "/Scat_Pair_Kernels", t);
+      },
+      [](HostScatNESPairTable& t) { bcast_nes_pair(t); });
+}
+
+HostScatBremTable read_scat_brem_table(const std::string& path) {
+  return root_read_and_bcast<HostScatBremTable>(
+      path,
+      [](const H5::H5File& f, HostScatBremTable& t) { read_brem_root(f, t); },
+      [](HostScatBremTable& t) { bcast_brem(t); });
 }
 
 }  // namespace io

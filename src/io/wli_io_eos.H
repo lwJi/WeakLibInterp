@@ -99,6 +99,15 @@ struct HostEosTable {
 // WL_TABLES_ROOT in callers).
 HostEosTable read_eos_table(const std::string& path);
 
+// Instrumentation seam (specs/table-format-and-io.md:184): the number of times
+// ANY reader entry point has actually opened a .h5 file via the shared
+// root-gated open wrapper. Only the I/O root rank opens, so under an MPI run at
+// >= 2 ranks a non-root rank observes this counter unchanged across a load —
+// the mechanism the rank-consistency / root-only-open test uses to prove
+// non-root ranks perform no file open. Shared across all six readers (one
+// counter). Serial builds see it increment once per successful load.
+int hdf5_open_count();
+
 // ----------------------------------------------------------------------------
 // Expected schema (reader expectations, exposed for the structural self-test).
 //

@@ -235,6 +235,15 @@ int main() {
       cell("row=EOS-inversion-DPY regime=in-bounds tier=relaxed",
            res.Error == 0 && wli::is_close(res.T, Ttarget, wli::rtol_relaxed));
     }
+    // DSY family coverage: same generic _DXY core; reuse the E sub-table as Ss.
+    {
+      Real D = 7.3e6, Y = 0.22, Ttarget = 2.6e10;
+      Real S = eosEval(D, Ttarget, Y);
+      auto res = wli::ComputeTemperatureWith_DSY_NoGuess(D, S, Y, Ds, nD, Ts, nT,
+                                                         Ys, nY, eOS, etbl, b);
+      cell("row=EOS-inversion-DSY regime=in-bounds tier=relaxed",
+           res.Error == 0 && wli::is_close(res.T, Ttarget, wli::rtol_relaxed));
+    }
   }
 
   // =========================================================================

@@ -11,6 +11,7 @@ In scope:
 - The coverage matrix: every public device entry point named by the leaf specs × {in-bounds, on-edge, out-of-range, NaN-input} × {synthetic + named production tables}, and which tolerance tier each cell asserts at.
 - The pass/fail discipline: every check asserts `|got − expected| ≤ rtol·|expected| + atol` (or exact / NaN-equality for the no-tolerance tier) and **fails the suite** on violation — never prints-and-passes.
 - The C++/AMReX-only test-time constraint: the suite links AMReX (CPU-only, double precision) and runs entirely on host with no GPU and no Fortran/Matlab.
+- The MPI configuration's coverage: the full matrix re-run unmodified under the MPI launcher at ≥ 2 ranks in the MPI-enabled build (`build-integration.md`), plus the rank-consistency cells that exist only there (bit-identical loaded tables, rank-identical entry-point results).
 
 Out of scope:
 - The per-channel interpolation arithmetic and physics invariants (each leaf spec owns its own; this spec only enumerates which entry points must be covered and how).
@@ -61,6 +62,15 @@ Each entry point is exercised across these four input regimes, drawn from both s
 | out-of-range | query below `Xs(1)` or above `Xs(n)` on ≥1 axis | clamp bracket index, **unclamped delta** → linear extrapolation from the edge cell (no error, no result clamp); for inversion, the appropriate integer error code and `T=0` |
 | NaN-input | non-positive value on a log axis (so `log10` is NaN) | NaN propagates silently to the result; for inversion, the `T=0`/error-code path |
 
+### The MPI configuration (second gating run)
+
+In the MPI-enabled build (see `build-integration.md`; the default serial build is unaffected), the same suite re-runs unmodified under the MPI launcher at 2 and at 4 ranks — every matrix cell must pass on every rank — plus two rank-consistency cells that exist only in this configuration, both at the **exact** tier (no tolerance):
+
+- **Table-load consistency** — after each table load (synthetic fixture and, where present, production), every rank holds byte-identical arrays, extents, and offsets, per `table-format-and-io.md`'s root-read + broadcast contract.
+- **Result consistency** — for each of the 8 entry points, evaluating identical sample queries on every rank yields bitwise-identical `double` results (identical table bytes + deterministic arithmetic ⇒ exact equality across ranks).
+
+A failure on any rank fails the suite (nonzero aggregate exit status under the launcher).
+
 ### The reference tables (the two fixture sources)
 
 - **Synthetic in-suite tables** — the always-on primary. The suite builds small tables in memory with closed-form properties (affine-in-log, constant, known symmetry triangles), so the suite runs with no external files. Sizes/ranges are implementation freedom provided the closed-form property holds by construction.
@@ -89,7 +99,7 @@ The four tiers — default parity `rtol 1e-12` / `atol 1e-30`, relaxed `1e-10`, 
 
 ### C++/AMReX-only at test time
 
-The suite links AMReX (default double-precision **CPU** configuration; see `build-integration.md`) and runs entirely on host with no GPU: the qualifier macros expand to nothing, `ParallelFor` becomes a sequential loop, and `Gpu::DeviceVector` allocates host memory. It **never builds or runs Fortran or Matlab** at test time; the named Fortran `_Point` routines are read-only sources of truth that define "correct". The correctness-bearing value type is `double` regardless of `amrex::Real`.
+The suite links AMReX (default double-precision **CPU** configuration; see `build-integration.md`) and runs entirely on host with no GPU: the qualifier macros expand to nothing, `ParallelFor` becomes a sequential loop, and `Gpu::DeviceVector` allocates host memory. It **never builds or runs Fortran or Matlab** at test time; the named Fortran `_Point` routines are read-only sources of truth that define "correct". The correctness-bearing value type is `double` regardless of `amrex::Real`. The MPI-enabled configuration changes none of this — still CPU-only, double precision, host execution, Fortran-free — it adds execution under the MPI launcher and the rank-consistency cells above.
 
 ## Verification
 
@@ -99,7 +109,8 @@ A fresh agent confirms the suite itself is correctly designed by these self-cont
 2. **Every row × every regime is realized.** For each of the 8 entry points, a check exists for each of {in-bounds, on-edge, out-of-range, NaN-input} against the synthetic table, and at least the node-identity / boundary / NaN cells additionally against the named production table.
 3. **Pass/fail is real.** Deliberately perturbing an expected value (e.g. injecting a 10× error into one corner) makes the corresponding cell **fail** the suite (proving the assertion is thresholded, not print-only).
 4. **No-Fortran-at-test-time.** The full suite builds and runs with only a C++ toolchain + AMReX (CPU/double); no Fortran or Matlab toolchain is invoked. Verified by building/running in this environment.
-5. **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, that its cited weaklib source-of-truth paths resolve, and that the coverage matrix references every leaf entry point (closure check).
+5. **The MPI run is realized and gating.** In the MPI-enabled build the full suite passes under the MPI launcher at 2 and at 4 ranks, both rank-consistency cells run, and a deliberate mismatch on one rank (e.g. corrupting one rank's copy of a loaded array before the consistency check) fails the suite — proving the cross-rank comparison is real, not per-rank-only.
+6. **Mechanical (validator).** `bash specs/tools/validate_specs.sh` (default mode) asserts this file carries the 7 mandated sections in order, names a concrete numeric tolerance, that its cited weaklib source-of-truth paths resolve, and that the coverage matrix references every leaf entry point (closure check).
 
 ## Implementation freedom
 
@@ -107,8 +118,10 @@ A fresh agent confirms the suite itself is correctly designed by these self-cont
 - The synthetic-table construction (sizes, axis ranges, how the affine-in-log/constant/symmetry properties are built in) — provided the closed-form property holds by construction.
 - Whether checks are organized per-entry-point, per-regime, or per-table, and whether the production-table cells are gated behind a "tables present" guard — provided the closure matrix is fully realized when the tables are available.
 - The reporting format for `pass` / `fail`, provided the two states are distinct.
+- How the rank-consistency cells compare across ranks (gather digests to the root, an allreduce min/max compare, …) and how the test targets register the MPI launcher — provided a mismatch on any rank fails the suite.
 
 ## Open questions / assumptions
 
 - **Production tables present, Fortran absent (assumption, non-blocking).** The named `.h5` tables are readable here (C++ HDF5 only), so the real-table cells run now; the Fortran/Matlab oracles are read-only sources of truth and are not invoked at test time. If a production table is absent on a given runner, its real-table cells may be skipped (reported distinctly from pass), but the synthetic cells — the actual gate — always run.
 - **CPU-only test target (assumption, non-blocking).** No GPU is required; AMReX is built CPU-only / double precision and the suite runs on host. A GPU build is a drop-in (the device/host-equivalence cell guards against host-only divergence), but GPU execution is not verified here. See `build-integration.md`.
+- **MPI execution is CPU-only here too (assumption, non-blocking).** The mpirun configuration exercises the distribution and rank-consistency contracts on host; combined MPI×GPU execution on a real cluster is not verified anywhere in this suite. Production-table cells under MPI assume the table path is readable by the I/O root rank (a shared filesystem or a root-local copy) — the root-read + broadcast contract makes root-visibility sufficient.

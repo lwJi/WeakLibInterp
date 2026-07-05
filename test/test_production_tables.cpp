@@ -25,8 +25,11 @@
 #include <string>
 #include <vector>
 
+#include <AMReX.H>
+
 #include "wli_compare.H"
 #include "wli_eos.H"
+#include "wli_eos_inversion.H"
 #include "wli_io_eos.H"
 #include "wli_io_opacity.H"
 #include "wli_opacity.H"
@@ -110,6 +113,77 @@ void run_eos(const std::string& path) {
   check(std::isnan(wli::EosInterpolateSingleVariable3DPoint(
             Real(0.0), T, Y, Ds, nD, Ts, nT, Ys, nY, OS, tbl)),
         "EOS NaN propagation on non-positive rho");
+
+  // ---- EOS inversion round-trip: DEY/DPY/DSY x NoGuess/Guess (6 cells) ------
+  // For each dependent-variable family, forward-evaluate X at an interior
+  // off-node (D, Tstar, Y), invert back to T, and assert Error==0, T==Tstar,
+  // and forward(D,T,Y)==X (all at the relaxed 1e-10 tol pinned by
+  // specs/eos-inversion.md:146-148). Bounds are built robustly (initialized set,
+  // MinX/MaxX from a recover()-scan of the DV buffer) so the code-10 trap cannot
+  // pass silently.
+  using NoGuessFn = wli::EosInversionResult (*)(
+      Real, Real, Real, const Real*, int, const Real*, int, const Real*, int,
+      Real, const Real*, const wli::EosInversionBounds&);
+  using GuessFn = wli::EosInversionResult (*)(
+      Real, Real, Real, const Real*, int, const Real*, int, const Real*, int,
+      Real, const Real*, Real, const wli::EosInversionBounds&);
+
+  // Interior off-node query: log-midpoint in D and T, linear midpoint in Y.
+  const Real Dq = std::sqrt(Ds[iD] * Ds[iD + 1]);
+  const Real Tstar = std::sqrt(Ts[iT] * Ts[iT + 1]);
+  const Real Yq = Real(0.5) * (Ys[iY] + Ys[iY + 1]);
+
+  auto run_family = [&](const char* fam, int fslot, NoGuessFn ng, GuessFn g) {
+    if (fslot < 0) {
+      check(false, std::string("inversion: missing DV slot for ") + fam);
+      return;
+    }
+    const wli::io::HostDV& fdv = t.dv[static_cast<std::size_t>(fslot)];
+    const Real* ftbl = fdv.values.data();
+    const Real fOS = fdv.offset;
+
+    wli::EosInversionBounds b;
+    b.MinD = Ds[0];
+    b.MaxD = Ds[nD - 1];
+    b.MinY = Ys[0];
+    b.MaxY = Ys[nY - 1];
+    Real lo = wli::recover(ftbl[0], fOS), hi = lo;
+    for (std::size_t k = 0; k < fdv.values.size(); ++k) {
+      Real v = wli::recover(ftbl[k], fOS);
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    b.MinX = lo;
+    b.MaxX = hi;
+    b.initialized = true;  // else CheckInputError returns vacuous code 10
+
+    const Real X = wli::EosInterpolateSingleVariable3DPoint(
+        Dq, Tstar, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl);
+
+    auto rn = ng(Dq, X, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl, b);
+    Real Xn = wli::EosInterpolateSingleVariable3DPoint(
+        Dq, rn.T, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl);
+    check(rn.Error == 0 && wli::is_close(rn.T, Tstar, wli::rtol_relaxed) &&
+              wli::is_close(Xn, X, wli::rtol_relaxed),
+          std::string("inversion round-trip ") + fam + " NoGuess");
+
+    auto rg = g(Dq, X, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl, Tstar, b);
+    Real Xg = wli::EosInterpolateSingleVariable3DPoint(
+        Dq, rg.T, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl);
+    check(rg.Error == 0 && wli::is_close(rg.T, Tstar, wli::rtol_relaxed) &&
+              wli::is_close(Xg, X, wli::rtol_relaxed),
+          std::string("inversion round-trip ") + fam + " Guess");
+  };
+
+  run_family("DEY", t.dvIndices.iInternalEnergyDensity,
+             &wli::ComputeTemperatureWith_DEY_NoGuess,
+             &wli::ComputeTemperatureWith_DEY_Guess);
+  run_family("DPY", t.dvIndices.iPressure,
+             &wli::ComputeTemperatureWith_DPY_NoGuess,
+             &wli::ComputeTemperatureWith_DPY_Guess);
+  run_family("DSY", t.dvIndices.iEntropyPerBaryon,
+             &wli::ComputeTemperatureWith_DSY_NoGuess,
+             &wli::ComputeTemperatureWith_DSY_Guess);
 }
 
 void run_emab(const std::string& path) {
@@ -155,6 +229,48 @@ void run_iso(const std::string& path) {
   check(t.nPoints[0] == wli::io::schema::kNEnergy && t.nPoints[1] > 0 &&
             t.nPoints[2] > 0 && t.nPoints[3] > 0 && t.nPoints[4] > 0,
         "Iso nPoints extents populated (nE == schema::kNEnergy)");
+
+  // Live kernel cells through IsoInterpolateSingleVariable5DPoint. Build the
+  // log-space grids the kernel expects (E/rho/T already-log10, Ye raw). Extents
+  // are Fortran (nE, nMom, nRho, nT, nYe).
+  const int nE = t.nPoints[0], nMom = t.nPoints[1], nD = t.nPoints[2],
+            nT = t.nPoints[3], nY = t.nPoints[4];
+  std::vector<Real> LogEs(nE), LogDs(nD), LogTs(nT), Ys(nY);
+  for (int i = 0; i < nE; ++i)
+    LogEs[i] = std::log10(t.common.energyGrid.points[i]);
+  for (int i = 0; i < nD; ++i) LogDs[i] = std::log10(t.common.axes[0].points[i]);
+  for (int i = 0; i < nT; ++i) LogTs[i] = std::log10(t.common.axes[1].points[i]);
+  for (int i = 0; i < nY; ++i) Ys[i] = t.common.axes[2].points[i];
+
+  const int iSpecies = 0, iMom = nMom / 2;
+  const Real* tbl = t.values[static_cast<std::size_t>(iSpecies)].data();
+  const Real OS = wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments,
+                                 iSpecies, iMom);
+  int iE = nE / 2, iD = nD / 2, iT = nT / 2, iY = nY / 2;
+
+  // Node identity: query at an interior node returns 10**(stored) - offset.
+  Real got = wli::IsoInterpolateSingleVariable5DPoint(
+      LogEs[iE], LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+      nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl);
+  Real want = wli::recover(
+      tbl[wli::flat_index<5>({iE, iMom, iD, iT, iY}, {nE, nMom, nD, nT, nY})],
+      OS);
+  check(wli::is_close(got, want, wli::rtol_relaxed),
+        "Iso node identity at an interior grid node");
+
+  // Boundary: a quarter-cell below the E edge extrapolates to a finite value.
+  Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            Elo, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso below-edge E extrapolates to a finite value");
+
+  // NaN propagation on a NaN LogE argument (E/rho/T only, never Ye).
+  check(std::isnan(wli::IsoInterpolateSingleVariable5DPoint(
+            std::nan(""), LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl)),
+        "Iso NaN propagation on a NaN LogE argument");
 }
 
 void run_nespair(const std::string& path, bool nes) {
@@ -171,6 +287,50 @@ void run_nespair(const std::string& path, bool nes) {
   check(t.nPoints[0] > 0 && t.nPoints[1] > 0 && t.nPoints[2] > 0 &&
             t.nPoints[3] > 0 && t.nPoints[4] > 0,
         std::string(nes ? "NES" : "Pair") + " nPoints extents populated");
+
+  const std::string tag(nes ? "NES" : "Pair");
+
+  // Live kernel cells through the channel-neutral 2D-aligned bilinear. The
+  // interpolated plane is (log10 T, log10 eta); the two energy indices and the
+  // kernel-component index are direct discrete table indices (NOT interpolated).
+  // Extents are Fortran (nEp, nE, nMom, nT, nEta). LogTs feeds from the shared
+  // /ThermoState temperature axis; LogXs from /EtaGrid.
+  const int nEp = t.nPoints[0], nE = t.nPoints[1], nMom = t.nPoints[2],
+            nT = t.nPoints[3], nEta = t.nPoints[4];
+  std::vector<Real> LogTs(nT), LogXs(nEta);
+  for (int i = 0; i < nT; ++i) LogTs[i] = std::log10(t.common.axes[1].points[i]);
+  for (int i = 0; i < nEta; ++i) LogXs[i] = std::log10(t.etaGrid.points[i]);
+
+  const int iSpecies = 0;      // nOpacities == 1
+  const int kernel = nMom / 2;  // discrete kernel-component index
+  const Real OS = wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments,
+                                 iSpecies, kernel);
+  const Real* tbl = t.kernels.data();
+  int iEp = nEp / 2, iE = nE / 2, iT = nT / 2, iX = nEta / 2;
+
+  // Node identity at an interior (T, eta) node with fixed energy/kernel indices.
+  Real got = wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+      LogTs[iT], LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, iEp, iE, nEp,
+      nE, kernel, nMom, OS, tbl);
+  Real want = wli::recover(
+      tbl[wli::flat_index<5>({iEp, iE, kernel, iT, iX},
+                             {nEp, nE, nMom, nT, nEta})],
+      OS);
+  check(wli::is_close(got, want, wli::rtol_relaxed),
+        tag + " node identity at an interior grid node");
+
+  // Boundary: a quarter-cell below the T edge extrapolates to a finite value.
+  Real Tlo = LogTs[0] - Real(0.25) * (LogTs[1] - LogTs[0]);
+  check(std::isfinite(wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+            Tlo, LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, iEp, iE, nEp,
+            nE, kernel, nMom, OS, tbl)),
+        tag + " below-edge T extrapolates to a finite value");
+
+  // NaN propagation on a NaN LogT argument.
+  check(std::isnan(wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+            std::nan(""), LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, iEp,
+            iE, nEp, nE, kernel, nMom, OS, tbl)),
+        tag + " NaN propagation on a NaN LogT argument");
 }
 
 void run_brem(const std::string& path) {
@@ -181,6 +341,45 @@ void run_brem(const std::string& path) {
   check(t.nPoints[0] > 0 && t.nPoints[1] > 0 && t.nPoints[2] > 0 &&
             t.nPoints[3] > 0 && t.nPoints[4] > 0,
         "Brem nPoints extents populated");
+
+  // Live kernel cells through the single-density inner bilinear. CRITICAL: the
+  // interpolated axes are (rho, T) — density BEFORE temperature — with extents
+  // Fortran (nEp, nE, nMom, nRho, nT). LogDs = axes[0] (rho), LogTs = axes[1].
+  const int nEp = t.nPoints[0], nE = t.nPoints[1], nMom = t.nPoints[2],
+            nD = t.nPoints[3], nT = t.nPoints[4];
+  std::vector<Real> LogDs(nD), LogTs(nT);
+  for (int i = 0; i < nD; ++i) LogDs[i] = std::log10(t.common.axes[0].points[i]);
+  for (int i = 0; i < nT; ++i) LogTs[i] = std::log10(t.common.axes[1].points[i]);
+
+  const int iSpecies = 0, moment = 0;  // nOpacities == nMoments == 1
+  const Real OS = wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments,
+                                 iSpecies, moment);
+  const Real* tbl = t.sSigma.data();
+  int iEp = nEp / 2, iE = nE / 2, iD = nD / 2, iT = nT / 2;
+
+  // Node identity at an interior (rho, T) node with fixed energy/moment indices.
+  Real got = wli::BremInterpolateSingleDensity2DAlignedPoint(
+      LogDs[iD], LogTs[iT], LogDs.data(), nD, LogTs.data(), nT, iEp, iE, nEp, nE,
+      moment, nMom, OS, tbl);
+  Real want = wli::recover(
+      tbl[wli::flat_index<5>({iEp, iE, moment, iD, iT},
+                             {nEp, nE, nMom, nD, nT})],
+      OS);
+  check(wli::is_close(got, want, wli::rtol_relaxed),
+        "Brem node identity at an interior grid node");
+
+  // Boundary: a quarter-cell below the rho edge extrapolates to a finite value.
+  Real Dlo = LogDs[0] - Real(0.25) * (LogDs[1] - LogDs[0]);
+  check(std::isfinite(wli::BremInterpolateSingleDensity2DAlignedPoint(
+            Dlo, LogTs[iT], LogDs.data(), nD, LogTs.data(), nT, iEp, iE, nEp, nE,
+            moment, nMom, OS, tbl)),
+        "Brem below-edge rho extrapolates to a finite value");
+
+  // NaN propagation on a NaN LogD argument.
+  check(std::isnan(wli::BremInterpolateSingleDensity2DAlignedPoint(
+            std::nan(""), LogTs[iT], LogDs.data(), nD, LogTs.data(), nT, iEp, iE,
+            nEp, nE, moment, nMom, OS, tbl)),
+        "Brem NaN propagation on a NaN LogD argument");
 }
 
 // Probe + run one channel; returns true iff the table was present.
@@ -205,7 +404,10 @@ bool one(const std::string& root, const char* base, F&& runner) {
 
 }  // namespace
 
-int main() {
+// The reader logic. Bracketed by amrex::Initialize/Finalize in main() because,
+// under an MPI build, the readers' ParallelDescriptor::Bcast runs on AMReX's
+// communicator, which requires AMReX to be initialized (spec:171 precondition).
+int run() {
   const char* rootEnv = std::getenv("WL_TABLES_ROOT");
   if (rootEnv == nullptr || rootEnv[0] == '\0') {
     std::printf(
@@ -242,4 +444,11 @@ int main() {
   std::printf("PASS production_tables: %d/6 named tables present, all cells ok\n",
               present);
   return EXIT_SUCCESS;
+}
+
+int main(int argc, char** argv) {
+  amrex::Initialize(argc, argv);
+  const int rc = run();
+  amrex::Finalize();
+  return rc;
 }

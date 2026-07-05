@@ -72,6 +72,14 @@ target_link_libraries(test_eos_inversion_family PRIVATE wli_lib)
 
 add_test(NAME eos_inversion_family COMMAND test_eos_inversion_family)
 
+# DescribeEOSInversionError code->string mapping (src/eos/wli_eos_inversion.H,
+# specs/eos-inversion.md:94-106). Header-only, so links only wli_lib; no HDF5.
+add_executable(test_eos_inversion_describe test_eos_inversion_describe.cpp)
+
+target_link_libraries(test_eos_inversion_describe PRIVATE wli_lib)
+
+add_test(NAME eos_inversion_describe COMMAND test_eos_inversion_describe)
+
 # EmAb single-point 4D evaluate kernel (src/opacity/wli_opacity_emab_iso.H,
 # specs/opacity-emab-iso.md). Header-only, synthetic table, so links only
 # wli_lib (AMReX CPU/double); no HDF5 needed.
@@ -125,6 +133,18 @@ add_executable(test_brem_point test_brem_point.cpp)
 target_link_libraries(test_brem_point PRIVATE wli_lib)
 
 add_test(NAME brem_point COMMAND test_brem_point)
+
+# Host-level ParallelFor array-form wrappers over the 15 _Point kernels
+# (src/eos/wli_eos.H, wli_eos_inversion.H, src/opacity/wli_opacity_{emab_iso,
+# nes_pair,brem}.H; specs/amrex-device-interface.md:80-88,100-102). Asserts the
+# array form is bit-identical to a serial loop of the same _Point core and is
+# callable inside a ParallelFor lambda. Header-only synthetic tables, so links
+# only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_parallelfor_wrappers test_parallelfor_wrappers.cpp)
+
+target_link_libraries(test_parallelfor_wrappers PRIVATE wli_lib)
+
+add_test(NAME parallelfor_wrappers COMMAND test_parallelfor_wrappers)
 
 # EOS HDF5 reader structural-conformance self-test (src/io/wli_io_eos.H,
 # specs/table-format-and-io.md:171-175). Parses the committed h5ls snapshot and
@@ -209,6 +229,155 @@ endif()
 add_test(NAME production_tables COMMAND test_production_tables)
 
 set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
+
+# MPI root-read + broadcast tests (specs/table-format-and-io.md:183-184). One
+# executable, two modes: "open" (non-root ranks never open the .h5; loads are
+# byte-identical across ranks) and "fail" (root-side open failure surfaces as
+# the same error on every rank, no hang). MPI-only: the executable returns 77
+# (CTest SKIP) outside an MPI build, so the default build/ suite stays green.
+# It writes a synthetic .h5 (test-only) and calls the live readers, so it links
+# the HDF5 C++ bindings + C library exactly like test_production_tables.
+add_executable(test_mpi_root_bcast test_mpi_root_bcast.cpp)
+
+target_link_libraries(test_mpi_root_bcast PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_mpi_root_bcast PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_mpi_root_bcast PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_mpi_root_bcast PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_mpi_root_bcast PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+# These MUST run at >= 2 ranks, so register a custom multi-rank COMMAND that
+# bypasses the global 1-rank CMAKE_TEST_LAUNCHER. In a non-MPI build there is no
+# MPI launcher and the executable itself returns 77 (SKIP); register it plainly
+# so the default build/ suite still lists (and skips) the tests.
+if(WLI_AMREX_MPI)
+  add_test(NAME mpi_root_open
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> open)
+  add_test(NAME mpi_root_open_failure
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> fail)
+else()
+  add_test(NAME mpi_root_open COMMAND test_mpi_root_bcast open)
+  add_test(NAME mpi_root_open_failure COMMAND test_mpi_root_bcast fail)
+endif()
+
+set_tests_properties(mpi_root_open mpi_root_open_failure
+  PROPERTIES SKIP_RETURN_CODE 77)
+
+# Rank-consistency cells + cross-rank-mismatch meta-test
+# (specs/regression-suite-design.md:65-72; specs/table-format-and-io.md:183). One
+# executable, three argv modes: "load" (per-table byte digest identical across
+# ranks after loading each of the six table types via the live readers + synthetic
+# .h5 fixtures, plus $WL_TABLES_ROOT production tables when present), "result"
+# (the 8 public entry points return bitwise-identical doubles on every rank), and
+# "corrupt" (positive control: one non-root rank corrupts its loaded copy and the
+# comparator must flag the divergence). Writes synthetic .h5 for the load/corrupt
+# modes, so it links the HDF5 C++ bindings + C library exactly like
+# test_mpi_root_bcast. MPI-only: the exe returns 77 (SKIP) outside an MPI build.
+add_executable(test_rank_consistency test_rank_consistency.cpp)
+
+target_link_libraries(test_rank_consistency PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_rank_consistency PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_rank_consistency PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_rank_consistency PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_rank_consistency PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+# These MUST run at >= 2 ranks (the corruption meta-test needs a peer to diverge
+# from), so register custom multi-rank COMMANDs that bypass the global 1-rank
+# CMAKE_TEST_LAUNCHER — mirroring the mpi_root_* precedent above. In a non-MPI
+# build there is no MPI launcher and the exe returns 77 (SKIP); register the
+# three modes plainly so the default build/ suite still lists (and skips) them.
+if(WLI_AMREX_MPI)
+  foreach(_mode load result corrupt)
+    foreach(_np 2 4)
+      add_test(NAME rank_consistency_${_mode}_np${_np}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} --oversubscribe
+                $<TARGET_FILE:test_rank_consistency> ${_mode})
+      set_tests_properties(rank_consistency_${_mode}_np${_np}
+        PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+  endforeach()
+else()
+  foreach(_mode load result corrupt)
+    add_test(NAME rank_consistency_${_mode}
+      COMMAND test_rank_consistency ${_mode})
+    set_tests_properties(rank_consistency_${_mode} PROPERTIES SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
+
+# ---------------------------------------------------------------------------
+# Full-suite multi-rank launcher wiring (specs/build-integration.md:61,72,82;
+# specs/regression-suite-design.md:65-72). In the MPI tree the whole suite must
+# pass under the launcher at BOTH 2 and 4 ranks. CMAKE_TEST_LAUNCHER is baked at
+# generate time (a single value, `-n 1`) so it cannot vary per ctest run;
+# instead we register per-test explicit mpiexec COMMANDs at N=2 and N=4. An
+# add_test whose COMMAND is a plain program path (${MPIEXEC_EXECUTABLE}) is NOT
+# wrapped by the global CMAKE_TEST_LAUNCHER (only executable *targets* are) —
+# exactly why the mpi_root_* tests above bypass the 1-rank launcher. The bare
+# 1-rank names (registered above/at file scope) stay untouched as the
+# "1-rank MPI == serial" cross-check (build-integration.md:61,72). Absent in
+# build/ (knob OFF) -> the serial test list is byte-identical to before.
+# --oversubscribe is a literal (MPIEXEC_PREFLAGS/POSTFLAGS are empty in the
+# cache) and is required for >1 rank on this core-scarce host.
+if(WLI_AMREX_MPI)
+  function(wli_add_mpi_ranks _name _exe)
+    foreach(_np 2 4)
+      add_test(NAME ${_name}_np${_np}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} --oversubscribe
+                $<TARGET_FILE:${_exe}>)
+      # Any target may legitimately SKIP (exit 77): production_tables does when
+      # WL_TABLES_ROOT is unset (same env on every forked rank, so the 77 is
+      # consistent across ranks); harmless on the pure-host-math targets that
+      # never return 77.
+      set_tests_properties(${_name}_np${_np} PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+  endfunction()
+
+  wli_add_mpi_ranks(scaffold               wli_tests)
+  wli_add_mpi_ranks(index_roundtrip        wli_index_tests)
+  wli_add_mpi_ranks(interp_core            test_interp_core)
+  wli_add_mpi_ranks(table_residency        test_table_residency)
+  wli_add_mpi_ranks(eos_point              test_eos_point)
+  wli_add_mpi_ranks(eos_diff_point         test_eos_diff_point)
+  wli_add_mpi_ranks(eos_inversion_dey      test_eos_inversion_dey)
+  wli_add_mpi_ranks(eos_inversion_family   test_eos_inversion_family)
+  wli_add_mpi_ranks(eos_inversion_describe test_eos_inversion_describe)
+  wli_add_mpi_ranks(emab_point             test_emab_point)
+  wli_add_mpi_ranks(iso_point              test_iso_point)
+  wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
+  wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
+  wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
+  wli_add_mpi_ranks(brem_point             test_brem_point)
+  wli_add_mpi_ranks(parallelfor_wrappers   test_parallelfor_wrappers)
+  wli_add_mpi_ranks(eos_reader_schema      test_eos_reader_schema)
+  wli_add_mpi_ranks(opacity_reader_schema  test_opacity_reader_schema)
+  wli_add_mpi_ranks(coverage_matrix        test_coverage_matrix)
+  wli_add_mpi_ranks(perturbation_meta      test_perturbation_meta)
+  wli_add_mpi_ranks(production_tables      test_production_tables)
+
+  # The root-read/broadcast tests already run at 2 ranks (mpi_root_open*, above);
+  # add their 4-rank vehicle so the whole suite genuinely runs at both counts.
+  add_test(NAME mpi_root_open_np4
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> open)
+  add_test(NAME mpi_root_open_failure_np4
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> fail)
+  set_tests_properties(mpi_root_open_np4 mpi_root_open_failure_np4
+    PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # Compile-check backends (WLI_GPU_BACKEND=CUDA/HIP): compile every suite
 # executable with the device compiler so the ParallelFor launches and device

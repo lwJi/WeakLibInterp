@@ -44,9 +44,18 @@ endif()
 set(WLI_CUDA_ARCH "8.0"    CACHE STRING "AMReX_CUDA_ARCH for WLI_GPU_BACKEND=CUDA")
 set(WLI_AMD_ARCH  "gfx90a" CACHE STRING "AMReX_AMD_ARCH for WLI_GPU_BACKEND=HIP")
 
+# MPI. OFF (default) is the gating serial build: CPU-only AMReX, suite runs on
+# host as a lone process. ON builds AMReX with AMReX_MPI=ON (CPU-only / double
+# unchanged) in a separate tree and runs the suite under the MPI launcher — a
+# second correctness-gating configuration (specs/build-integration.md §61). The
+# default build stays MPI-free and byte-for-byte unchanged (knob OFF forces the
+# same AMReX_MPI=OFF value as before).
+set(WLI_AMREX_MPI OFF CACHE BOOL
+    "Build AMReX with MPI (AMReX_MPI=ON) and run the suite under the MPI launcher")
+
 set(AMReX_GPU_BACKEND    ${WLI_GPU_BACKEND} CACHE STRING "" FORCE)
 set(AMReX_PRECISION      ${WLI_AMREX_PRECISION} CACHE STRING "" FORCE)
-set(AMReX_MPI            OFF    CACHE BOOL   "" FORCE)
+set(AMReX_MPI            ${WLI_AMREX_MPI} CACHE BOOL   "" FORCE)
 set(AMReX_FORTRAN        OFF    CACHE BOOL   "" FORCE)
 set(AMReX_OMP            OFF    CACHE BOOL   "" FORCE)
 set(AMReX_INSTALL        OFF    CACHE BOOL   "" FORCE)
@@ -101,6 +110,25 @@ endfunction()
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 
 enable_testing()
+
+# ---------------------------------------------------------------------------
+# MPI launcher for the suite. AMReX's own AMReXParallelBackends.cmake already
+# find_package(MPI)s inside add_subdirectory(amrex) so wli_lib/tests link MPI
+# transitively via AMReX::amrex; the explicit top-level find here is what
+# populates MPIEXEC_EXECUTABLE / MPIEXEC_NUMPROC_FLAG. CMAKE_TEST_LAUNCHER
+# (CMake >= 3.29) is prepended to every add_test whose COMMAND is an executable
+# target, so all 19 test targets run under `mpiexec -n 1` with zero edits to
+# test/CMakeLists.txt. Empty when the knob is OFF -> default build unchanged.
+# ---------------------------------------------------------------------------
+if(WLI_AMREX_MPI)
+  # Only the CXX component is requested: this project enables CXX (project(...
+  # CXX)), so a C-component request would fail with "language C is not enabled".
+  # MPIEXEC_EXECUTABLE / MPIEXEC_NUMPROC_FLAG are populated regardless of the
+  # requested language component. Link wiring comes transitively via AMReX.
+  find_package(MPI REQUIRED COMPONENTS CXX)
+  set(CMAKE_TEST_LAUNCHER
+      "${MPIEXEC_EXECUTABLE};${MPIEXEC_NUMPROC_FLAG};1")
+endif()
 
 add_subdirectory(src)
 add_subdirectory(test)

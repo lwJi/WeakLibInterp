@@ -13,10 +13,12 @@
 #include "wli_io_eos.H"
 
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 
 #include <H5Cpp.h>
 
+#include "wli_io_bcast_detail.H"  // root-read + MPI broadcast primitives
 #include "wli_io_hdf5_detail.H"  // shared read primitives (extracted, no ad-hoc copy)
 
 namespace wli {
@@ -28,11 +30,16 @@ using detail::read_int_scalar;
 using detail::read_strings;
 using detail::try_read_double;
 
-HostEosTable read_eos_table(const std::string& path) {
-  H5::Exception::dontPrint();
-  H5::H5File file(path, H5F_ACC_RDONLY);
+namespace {
 
-  HostEosTable t;
+// Root-only serial read: open + every read_* into `t`. Byte-for-byte the former
+// serial body of read_eos_table (spec requirements 1-6). Only the I/O root rank
+// runs this; it may throw H5::Exception / std::runtime_error, which the caller
+// turns into a broadcast status flag (collective failure).
+void read_eos_table_root(const std::string& path, HostEosTable& t) {
+  H5::Exception::dontPrint();
+  std::unique_ptr<H5::H5File> filePtr = detail::root_open(path);
+  H5::H5File& file = *filePtr;
 
   // (1) /DependentVariables: Dimensions {3} + nVariables {1} (allocate first).
   {
@@ -87,7 +94,6 @@ HostEosTable read_eos_table(const std::string& path) {
         d.vmax = vmax[j];
         d.hasExtents = true;
       }
-      t.dvByName.emplace(d.name, static_cast<int>(j));
       t.dv.push_back(std::move(d));
     }
 
@@ -131,9 +137,108 @@ HostEosTable read_eos_table(const std::string& path) {
     }
     t.repaired = rep;
   }
+}
 
+// Broadcast the whole HostEosTable from root to every rank: fixed-size metadata
+// first, then every value/name/offset array (spec:171). dvByName is NOT
+// broadcast (unordered_map) — it is rebuilt locally on every rank from the
+// now-identical dv[j].name (cheapest, guarantees identical map).
+void bcast_eos_table(HostEosTable& t) {
+  detail::bcast_scalar(t.nVariables);
+  detail::bcast_array(t.nPoints);
+
+  // /ThermoState axes + iRho/iT/iYe.
+  detail::bcast_thermo_state(t.axes, t.tsIndices);
+
+  // Dependent variables: resize the vector on non-root, then broadcast each.
+  if (!detail::io_is_root()) {
+    t.dv.resize(static_cast<std::size_t>(t.nVariables));
+  }
+  for (auto& d : t.dv) {
+    detail::bcast_string(d.name);
+    detail::bcast_scalar(d.offset);
+    detail::bcast_scalar(d.vmin);
+    detail::bcast_scalar(d.vmax);
+    detail::bcast_flag(d.hasExtents);
+    detail::bcast_vector(d.values);
+  }
+
+  // Role -> slot indices (15 ints), broadcast as a fixed block.
+  std::array<int, 15> idx = {
+      t.dvIndices.iPressure,
+      t.dvIndices.iEntropyPerBaryon,
+      t.dvIndices.iInternalEnergyDensity,
+      t.dvIndices.iElectronChemicalPotential,
+      t.dvIndices.iProtonChemicalPotential,
+      t.dvIndices.iNeutronChemicalPotential,
+      t.dvIndices.iProtonMassFraction,
+      t.dvIndices.iNeutronMassFraction,
+      t.dvIndices.iAlphaMassFraction,
+      t.dvIndices.iHeavyMassFraction,
+      t.dvIndices.iHeavyMassNumber,
+      t.dvIndices.iHeavyChargeNumber,
+      t.dvIndices.iHeavyBindingEnergy,
+      t.dvIndices.iThermalEnergy,
+      t.dvIndices.iGamma1};
+  detail::bcast_array(idx);
+  t.dvIndices.iPressure = idx[0];
+  t.dvIndices.iEntropyPerBaryon = idx[1];
+  t.dvIndices.iInternalEnergyDensity = idx[2];
+  t.dvIndices.iElectronChemicalPotential = idx[3];
+  t.dvIndices.iProtonChemicalPotential = idx[4];
+  t.dvIndices.iNeutronChemicalPotential = idx[5];
+  t.dvIndices.iProtonMassFraction = idx[6];
+  t.dvIndices.iNeutronMassFraction = idx[7];
+  t.dvIndices.iAlphaMassFraction = idx[8];
+  t.dvIndices.iHeavyMassFraction = idx[9];
+  t.dvIndices.iHeavyMassNumber = idx[10];
+  t.dvIndices.iHeavyChargeNumber = idx[11];
+  t.dvIndices.iHeavyBindingEnergy = idx[12];
+  t.dvIndices.iThermalEnergy = idx[13];
+  t.dvIndices.iGamma1 = idx[14];
+
+  detail::bcast_vector(t.repaired);
+
+  // Rebuild the name -> slot map identically on every rank (root included).
+  t.dvByName.clear();
+  for (std::size_t j = 0; j < t.dv.size(); ++j) {
+    t.dvByName.emplace(t.dv[j].name, static_cast<int>(j));
+  }
+}
+
+}  // namespace
+
+HostEosTable read_eos_table(const std::string& path) {
+  HostEosTable t;
+
+  // Root-read + broadcast (spec:170-171). Only the I/O root opens/reads the
+  // file, inside a try/catch that maps any failure to status=0. In a non-MPI
+  // build io_is_root() is always true and every Bcast is a no-op, so this is
+  // byte-for-byte the serial read.
+  int status = 1;  // 1 = ok, 0 = root-side open/read failure
+  if (detail::io_is_root()) {
+    try {
+      read_eos_table_root(path, t);
+    } catch (H5::Exception&) {
+      status = 0;
+    } catch (std::exception&) {
+      status = 0;
+    }
+  }
+
+  // Broadcast status FIRST so a root-side failure is delivered to every rank as
+  // the same error — no rank left blocked in a later array Bcast (no hang).
+  detail::bcast_status(status);
+  if (status == 0) {
+    throw std::runtime_error(
+        "wli::io::read_eos_table: I/O root failed to open/read '" + path + "'");
+  }
+
+  bcast_eos_table(t);
   return t;
 }
+
+int hdf5_open_count() { return detail::open_counter(); }
 
 }  // namespace io
 }  // namespace wli
