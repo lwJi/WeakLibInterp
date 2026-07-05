@@ -40,6 +40,7 @@
 #include <AMReX_ParallelDescriptor.H>
 
 #include "wli_io_eos.H"
+#include "wli_rank_digest.H"  // shared Hasher + digest() overloads (test-only)
 
 namespace {
 
@@ -145,56 +146,10 @@ void write_synthetic_eos(const std::string& path) {
 }
 
 // ---- Byte digest of a loaded table (exact / bitwise tier). ----------------
-
-struct Hasher {
-  std::uint64_t h = 1469598103934665603ULL;  // FNV-1a offset basis
-  void bytes(const void* p, std::size_t n) {
-    const auto* b = static_cast<const unsigned char*>(p);
-    for (std::size_t i = 0; i < n; ++i) {
-      h ^= b[i];
-      h *= 1099511628211ULL;
-    }
-  }
-  void i(int v) { bytes(&v, sizeof(v)); }
-  void d(double v) { bytes(&v, sizeof(v)); }
-  void s(const std::string& v) {
-    i(static_cast<int>(v.size()));
-    bytes(v.data(), v.size());
-  }
-  void vd(const std::vector<double>& v) {
-    i(static_cast<int>(v.size()));
-    bytes(v.data(), v.size() * sizeof(double));
-  }
-  void vi(const std::vector<int>& v) {
-    i(static_cast<int>(v.size()));
-    bytes(v.data(), v.size() * sizeof(int));
-  }
-};
-
-std::uint64_t digest(const wli::io::HostEosTable& t) {
-  Hasher hh;
-  hh.i(t.nVariables);
-  for (int p : t.nPoints) hh.i(p);
-  for (const auto& ax : t.axes) {
-    hh.s(ax.name);
-    hh.i(static_cast<int>(ax.kind));
-    hh.vd(ax.points);
-  }
-  for (int v : t.tsIndices) hh.i(v);
-  for (const auto& dv : t.dv) {
-    hh.s(dv.name);
-    hh.d(dv.offset);
-    hh.d(dv.vmin);
-    hh.d(dv.vmax);
-    hh.i(dv.hasExtents ? 1 : 0);
-    hh.vd(dv.values);
-  }
-  hh.i(t.dvIndices.iPressure);
-  hh.i(t.dvIndices.iEntropyPerBaryon);
-  hh.i(t.dvIndices.iGamma1);
-  hh.vi(t.repaired);
-  return hh.h;
-}
+// The generic Hasher + per-struct digest() overloads now live in the shared
+// test-only header wli_rank_digest.H (reused by test_rank_consistency.cpp);
+// pull the EOS overload into this namespace so the call site stays unqualified.
+using wli::test::digest;
 
 // ---- Test (a): non-root ranks never open; loads are byte-identical. -------
 

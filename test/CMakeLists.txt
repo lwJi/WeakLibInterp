@@ -250,6 +250,53 @@ endif()
 set_tests_properties(mpi_root_open mpi_root_open_failure
   PROPERTIES SKIP_RETURN_CODE 77)
 
+# Rank-consistency cells + cross-rank-mismatch meta-test
+# (specs/regression-suite-design.md:65-72; specs/table-format-and-io.md:183). One
+# executable, three argv modes: "load" (per-table byte digest identical across
+# ranks after loading each of the six table types via the live readers + synthetic
+# .h5 fixtures, plus $WL_TABLES_ROOT production tables when present), "result"
+# (the 8 public entry points return bitwise-identical doubles on every rank), and
+# "corrupt" (positive control: one non-root rank corrupts its loaded copy and the
+# comparator must flag the divergence). Writes synthetic .h5 for the load/corrupt
+# modes, so it links the HDF5 C++ bindings + C library exactly like
+# test_mpi_root_bcast. MPI-only: the exe returns 77 (SKIP) outside an MPI build.
+add_executable(test_rank_consistency test_rank_consistency.cpp)
+
+target_link_libraries(test_rank_consistency PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_rank_consistency PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_rank_consistency PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_rank_consistency PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_rank_consistency PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+# These MUST run at >= 2 ranks (the corruption meta-test needs a peer to diverge
+# from), so register custom multi-rank COMMANDs that bypass the global 1-rank
+# CMAKE_TEST_LAUNCHER — mirroring the mpi_root_* precedent above. In a non-MPI
+# build there is no MPI launcher and the exe returns 77 (SKIP); register the
+# three modes plainly so the default build/ suite still lists (and skips) them.
+if(WLI_AMREX_MPI)
+  foreach(_mode load result corrupt)
+    foreach(_np 2 4)
+      add_test(NAME rank_consistency_${_mode}_np${_np}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} --oversubscribe
+                $<TARGET_FILE:test_rank_consistency> ${_mode})
+      set_tests_properties(rank_consistency_${_mode}_np${_np}
+        PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+  endforeach()
+else()
+  foreach(_mode load result corrupt)
+    add_test(NAME rank_consistency_${_mode}
+      COMMAND test_rank_consistency ${_mode})
+    set_tests_properties(rank_consistency_${_mode} PROPERTIES SKIP_RETURN_CODE 77)
+  endforeach()
+endif()
+
 # ---------------------------------------------------------------------------
 # Full-suite multi-rank launcher wiring (specs/build-integration.md:61,72,82;
 # specs/regression-suite-design.md:65-72). In the MPI tree the whole suite must
