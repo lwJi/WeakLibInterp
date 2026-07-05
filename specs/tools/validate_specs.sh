@@ -151,6 +151,9 @@ SPEC_REQUIRE_IN_SPEC=(
   "table-format-and-io.md|||EmAb_CorrectedAbsorption"
   "table-format-and-io.md|||wlEOSIOModuleHDF.f90"
   "table-format-and-io.md|||wlOpacityTableIOModuleHDF.f90"
+  "table-format-and-io.md|||BroadcastEquationOfStateTableParallel"
+  "table-format-and-io.md|||root-read + broadcast"
+  "table-format-and-io.md|||AMReX_ParallelDescriptor.H"
   "opacity-emab-iso.md|||LogInterpolateSingleVariable_4D_Custom_Point"
   "opacity-emab-iso.md|||wlInterpolationModule.F90"
   "opacity-emab-iso.md|||wlOpacityFieldsModule.f90"
@@ -176,6 +179,9 @@ SPEC_REQUIRE_IN_SPEC=(
   "build-integration.md|||CPU-only"
   "build-integration.md|||double"
   "build-integration.md|||amrex::Real"
+  "build-integration.md|||AMReX_MPI=ON"
+  "build-integration.md|||AMReX_ParallelDescriptor.H"
+  "regression-suite-design.md|||rank-consistency"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
