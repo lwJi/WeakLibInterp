@@ -100,6 +100,62 @@ jobs:
       - name: Run regression suite
         run: ctest --test-dir WeakLibInterp/build --output-on-failure
 
+  # Correctness-gating MPI tier: a second (AMReX_MPI=ON) tree that actually
+  # runs ctest — unlike the compile-only GPU jobs, MPI parallelism runs on the
+  # CPU runner, so this job exercises the 1/2/4-rank suite for real. Bare
+  # runs-on (non-root runner) keeps plain --oversubscribe sufficient; no
+  # container / --allow-run-as-root needed (specs/build-integration.md §61,72).
+  build-test-mpi:
+    name: Build + ctest (MPI, 2/4 ranks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      # OpenMPI (libopenmpi-dev/openmpi-bin) puts mpiexec on PATH so the
+      # if(WLI_AMREX_MPI) find_package(MPI REQUIRED COMPONENTS CXX) resolves.
+      - name: Install HDF5 and MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libhdf5-dev libopenmpi-dev openmpi-bin
+
+      # AMReX_MPI=ON is a distinct AMReX compile, so it needs its own ccache
+      # key separate from build-test's amrex-<ref>.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: amrex-mpi-${{ env.AMREX_REF }}
+          max-size: 1G
+
+      - name: Configure (MPI)
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build-mpi
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_AMREX_MPI=ON
+          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build WeakLibInterp/build-mpi --parallel 4
+
+      # One unfiltered ctest covers all three rank tiers: bare test names run
+      # at 1 rank via the global CMAKE_TEST_LAUNCHER, and every _np2/_np4 name
+      # is separately registered. Production-table tests SKIP (77) with
+      # WL_TABLES_ROOT unset, as in build-test.
+      - name: Run regression suite (1/2/4 ranks)
+        run: ctest --test-dir WeakLibInterp/build-mpi --output-on-failure
+
   # Compile-only GPU checks (CarpetX model): build the library + full suite
   # with the device compiler to catch missing AMREX_GPU_HOST_DEVICE qualifiers
   # and host-only calls in device code. No ctest — runners have no GPU; the
