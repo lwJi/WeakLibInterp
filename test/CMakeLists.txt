@@ -250,6 +250,66 @@ endif()
 set_tests_properties(mpi_root_open mpi_root_open_failure
   PROPERTIES SKIP_RETURN_CODE 77)
 
+# ---------------------------------------------------------------------------
+# Full-suite multi-rank launcher wiring (specs/build-integration.md:61,72,82;
+# specs/regression-suite-design.md:65-72). In the MPI tree the whole suite must
+# pass under the launcher at BOTH 2 and 4 ranks. CMAKE_TEST_LAUNCHER is baked at
+# generate time (a single value, `-n 1`) so it cannot vary per ctest run;
+# instead we register per-test explicit mpiexec COMMANDs at N=2 and N=4. An
+# add_test whose COMMAND is a plain program path (${MPIEXEC_EXECUTABLE}) is NOT
+# wrapped by the global CMAKE_TEST_LAUNCHER (only executable *targets* are) —
+# exactly why the mpi_root_* tests above bypass the 1-rank launcher. The bare
+# 1-rank names (registered above/at file scope) stay untouched as the
+# "1-rank MPI == serial" cross-check (build-integration.md:61,72). Absent in
+# build/ (knob OFF) -> the serial test list is byte-identical to before.
+# --oversubscribe is a literal (MPIEXEC_PREFLAGS/POSTFLAGS are empty in the
+# cache) and is required for >1 rank on this core-scarce host.
+if(WLI_AMREX_MPI)
+  function(wli_add_mpi_ranks _name _exe)
+    foreach(_np 2 4)
+      add_test(NAME ${_name}_np${_np}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} --oversubscribe
+                $<TARGET_FILE:${_exe}>)
+      # Any target may legitimately SKIP (exit 77): production_tables does when
+      # WL_TABLES_ROOT is unset (same env on every forked rank, so the 77 is
+      # consistent across ranks); harmless on the pure-host-math targets that
+      # never return 77.
+      set_tests_properties(${_name}_np${_np} PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+  endfunction()
+
+  wli_add_mpi_ranks(scaffold               wli_tests)
+  wli_add_mpi_ranks(index_roundtrip        wli_index_tests)
+  wli_add_mpi_ranks(interp_core            test_interp_core)
+  wli_add_mpi_ranks(table_residency        test_table_residency)
+  wli_add_mpi_ranks(eos_point              test_eos_point)
+  wli_add_mpi_ranks(eos_diff_point         test_eos_diff_point)
+  wli_add_mpi_ranks(eos_inversion_dey      test_eos_inversion_dey)
+  wli_add_mpi_ranks(eos_inversion_family   test_eos_inversion_family)
+  wli_add_mpi_ranks(emab_point             test_emab_point)
+  wli_add_mpi_ranks(iso_point              test_iso_point)
+  wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
+  wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
+  wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
+  wli_add_mpi_ranks(brem_point             test_brem_point)
+  wli_add_mpi_ranks(eos_reader_schema      test_eos_reader_schema)
+  wli_add_mpi_ranks(opacity_reader_schema  test_opacity_reader_schema)
+  wli_add_mpi_ranks(coverage_matrix        test_coverage_matrix)
+  wli_add_mpi_ranks(perturbation_meta      test_perturbation_meta)
+  wli_add_mpi_ranks(production_tables      test_production_tables)
+
+  # The root-read/broadcast tests already run at 2 ranks (mpi_root_open*, above);
+  # add their 4-rank vehicle so the whole suite genuinely runs at both counts.
+  add_test(NAME mpi_root_open_np4
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> open)
+  add_test(NAME mpi_root_open_failure_np4
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 --oversubscribe
+            $<TARGET_FILE:test_mpi_root_bcast> fail)
+  set_tests_properties(mpi_root_open_np4 mpi_root_open_failure_np4
+    PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # Compile-check backends (WLI_GPU_BACKEND=CUDA/HIP): compile every suite
 # executable with the device compiler so the ParallelFor launches and device
 # kernels in the tests are compile-checked too; no-op for the gating NONE
