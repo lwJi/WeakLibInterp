@@ -30,6 +30,7 @@
 Per `specs/build-integration.md` the target is **AMReX CPU-only, double precision, host execution, no Fortran/Matlab**; the correctness-bearing value type is pinned to `double` (`src/core/wli_real.H`, `wli::Real`) regardless of `amrex::Real`. AMReX resolves from `../amrex` via `add_subdirectory` (override with `-DWLI_AMREX_ROOT=<path>`). Build dir is `build/` (gitignored); `.build/` is agent scratch, never the build dir.
 
 - **Validate specs:** `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh`
+- **Validate the Cactus thorn (structural):** `bash specs/tools/validate_thorn.sh` — standalone file-shape gate for `cactus/thorns/WeakLibInterp/` (configuration.ccl + src/{detect.sh,build.sh,make.code.deps}); not registered in ctest, run manually after touching the thorn. In-Cactus acceptance (cactus-integration.md Verification #5) stays manual/environment-gated — no Cactus checkout on this host.
 - **Configure:** `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
 - **Build the library + suite:** `cmake --build build -j4` (cap `-j`; AMReX is large and uncapped builds OOM this host). After adding a new test target to `test/CMakeLists.txt`, re-run the configure step first — the incremental build won't see the new target otherwise.
 - **Run the regression suite:** `ctest --test-dir build --output-on-failure`
