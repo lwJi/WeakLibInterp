@@ -113,6 +113,7 @@ REGISTERED_SPECS=(
   "opacity-emab-iso.md"
   "opacity-nes-pair.md"
   "opacity-brem.md"
+  "opacity-differentiate.md"
   "regression-suite-design.md"
   "build-integration.md"
   "cactus-integration.md"
