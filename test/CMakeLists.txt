@@ -98,6 +98,24 @@ target_link_libraries(test_iso_point PRIVATE wli_lib)
 
 add_test(NAME iso_point COMMAND test_iso_point)
 
+# EmAb single-point 4D evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_emab_iso.H, specs/opacity-differentiate.md).
+# Header-only, synthetic table, so links only wli_lib; no HDF5 needed.
+add_executable(test_emab_diff_point test_emab_diff_point.cpp)
+
+target_link_libraries(test_emab_diff_point PRIVATE wli_lib)
+
+add_test(NAME emab_diff_point COMMAND test_emab_diff_point)
+
+# Iso single-point 5D-slice-to-4D evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_emab_iso.H, specs/opacity-differentiate.md).
+# Header-only, synthetic 5D table, so links only wli_lib; no HDF5 needed.
+add_executable(test_iso_diff_point test_iso_diff_point.cpp)
+
+target_link_libraries(test_iso_diff_point PRIVATE wli_lib)
+
+add_test(NAME iso_diff_point COMMAND test_iso_diff_point)
+
 # NES/Pair aligned 2D2D bilinear single-point evaluate kernel
 # (src/opacity/wli_opacity_nes_pair.H, specs/opacity-nes-pair.md). Header-only, synthetic 5D
 # table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
@@ -356,6 +374,8 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(eos_inversion_describe test_eos_inversion_describe)
   wli_add_mpi_ranks(emab_point             test_emab_point)
   wli_add_mpi_ranks(iso_point              test_iso_point)
+  wli_add_mpi_ranks(emab_diff_point        test_emab_diff_point)
+  wli_add_mpi_ranks(iso_diff_point         test_iso_diff_point)
   wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
   wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
   wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)

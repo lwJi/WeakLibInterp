@@ -148,11 +148,12 @@ Real PentaLinear(Real p00000, Real p10000, Real p01000, Real p11000,
 }
 
 // -------------------------------------------------------------------------
-// Analytic partials (raw d/d(delta_k); oracle :254-367). Each is the difference
+// Analytic partials (raw d/d(delta_k); oracle :254-484). Each is the difference
 // of two lower-dim basis evals at the two bracketing values of the
 // differentiated axis. The per-axis chain-rule scale factors and the
-// (physical+offset) reconstitution are a LATER task (EOS evaluate-and-diff);
-// this exposes only the raw partials. Tetra/Penta partials are out of scope.
+// (physical+offset) reconstitution live in the evaluate-and-differentiate leaves
+// (EOS 3D, EmAb/Iso 4D); this exposes only the raw partials. Penta partials are
+// out of scope.
 // -------------------------------------------------------------------------
 
 // d(BiLinear)/d(dX1) (oracle :254-270).
@@ -192,6 +193,59 @@ Real dTriLineardX3(Real p000, Real p100, Real p010, Real p110, Real p001,
                    Real dX2) noexcept {
   return BiLinear(p001, p101, p011, p111, dX1, dX2) -
          BiLinear(p000, p100, p010, p110, dX1, dX2);
+}
+
+// d(TetraLinear)/d(dX1) (oracle :395-417). Difference of the X1-upper and
+// X1-lower 8-corner TriLinear groups over the OTHER three deltas (dX2,dX3,dX4).
+// Each TriLinear's own (dX1,dX2,dX3) slots map to this cell's (dX2,dX3,dX4).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real dTetraLineardX1(Real p0000, Real p1000, Real p0100, Real p1100, Real p0010,
+                     Real p1010, Real p0110, Real p1110, Real p0001, Real p1001,
+                     Real p0101, Real p1101, Real p0011, Real p1011, Real p0111,
+                     Real p1111, Real dX2, Real dX3, Real dX4) noexcept {
+  return TriLinear(p1000, p1100, p1010, p1110, p1001, p1101, p1011, p1111, dX2,
+                   dX3, dX4) -
+         TriLinear(p0000, p0100, p0010, p0110, p0001, p0101, p0011, p0111, dX2,
+                   dX3, dX4);
+}
+
+// d(TetraLinear)/d(dX2) (oracle :419-441). Uses the OTHER three deltas
+// (dX1,dX3,dX4).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real dTetraLineardX2(Real p0000, Real p1000, Real p0100, Real p1100, Real p0010,
+                     Real p1010, Real p0110, Real p1110, Real p0001, Real p1001,
+                     Real p0101, Real p1101, Real p0011, Real p1011, Real p0111,
+                     Real p1111, Real dX1, Real dX3, Real dX4) noexcept {
+  return TriLinear(p0100, p1100, p0110, p1110, p0101, p1101, p0111, p1111, dX1,
+                   dX3, dX4) -
+         TriLinear(p0000, p1000, p0010, p1010, p0001, p1001, p0011, p1011, dX1,
+                   dX3, dX4);
+}
+
+// d(TetraLinear)/d(dX3) (oracle :443-465). Uses the OTHER three deltas
+// (dX1,dX2,dX4).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real dTetraLineardX3(Real p0000, Real p1000, Real p0100, Real p1100, Real p0010,
+                     Real p1010, Real p0110, Real p1110, Real p0001, Real p1001,
+                     Real p0101, Real p1101, Real p0011, Real p1011, Real p0111,
+                     Real p1111, Real dX1, Real dX2, Real dX4) noexcept {
+  return TriLinear(p0010, p1010, p0110, p1110, p0011, p1011, p0111, p1111, dX1,
+                   dX2, dX4) -
+         TriLinear(p0000, p1000, p0100, p1100, p0001, p1001, p0101, p1101, dX1,
+                   dX2, dX4);
+}
+
+// d(TetraLinear)/d(dX4) (oracle :467-489). Uses the OTHER three deltas
+// (dX1,dX2,dX3).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+Real dTetraLineardX4(Real p0000, Real p1000, Real p0100, Real p1100, Real p0010,
+                     Real p1010, Real p0110, Real p1110, Real p0001, Real p1001,
+                     Real p0101, Real p1101, Real p0011, Real p1011, Real p0111,
+                     Real p1111, Real dX1, Real dX2, Real dX3) noexcept {
+  return TriLinear(p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111, dX1,
+                   dX2, dX3) -
+         TriLinear(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110, dX1,
+                   dX2, dX3);
 }
 
 // -------------------------------------------------------------------------
