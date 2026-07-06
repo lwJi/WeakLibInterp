@@ -8,6 +8,7 @@
 build/
 build-single/
 build-mpi/
+build-notests/
 
 *.pyc
 .vscode

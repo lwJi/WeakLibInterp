@@ -18,10 +18,10 @@ Current state: the core mission is substantially complete and green — all 8 de
   - tests: (a) configure this repo in installed-AMReX mode against a CPU-only/double AMReX install prefix succeeds and the library + suite build (Verification #1's "installed-AMReX rehearsal … standing CI proxy", spec:75); (b) guard-trips negative test (Verification #2, spec:76): configure against a CPU-backend install prefix while requesting `WLI_GPU_BACKEND=CUDA` fails at configure time naming both values. Both are configure/build-level checks, not ctest cells.
   - notes: DONE (CMake-only, root `CMakeLists.txt`). Knob is `WLI_AMREX_INSTALL_DIR` (CACHE PATH, empty default = sibling-source mode unchanged; `WLI_AMREX_ROOT` still the source path — not overloaded). Installed branch: `find_package(AMReX REQUIRED CONFIG PATHS ...)`, then the consistency guard, then `enable_language(CUDA)` + bare `include(AMReXTargetHelpers)` (the install prepends its module dir to `CMAKE_MODULE_PATH`; guard-before-enable_language ordering is load-bearing so V#2 trips with the guard's diagnostic, not "no CUDA compiler"). Guard covers GPU backend + MPI only — precision is spec-exempt (spec:63; `wli::Real` pinned to double regardless), narrower than this item's original paraphrase. All three checks passed locally: installed-mode ctest 26 green, CUDA-vs-NONE guard trips naming both values, default `build/` tree unchanged (26 green). Scratch install left at `.build/amrex-installed/prefix` for this session only — .build/ is wiped each iteration; the CI-job item is the standing harness and must rebuild the prefix itself. Caveat learned: a stale `build/` cache from another OS (macOS `mpicxx` path) fails configure — `rm -rf build` first when that happens.
 
-- [ ] Library-only / tests-off CMake switch
+- [x] Library-only / tests-off CMake switch
   - spec: specs/cactus-integration.md (§:56,77)
   - tests: configure with the switch ON produces no `test_*` ctest targets and still builds `wli_lib`; configure with it OFF/absent is byte-for-byte the current behavior (all existing targets present). Configure-level check.
-  - notes: `CMakeLists.txt:134` unconditionally runs `add_subdirectory(test)`; no guard exists. Smallest, fully independent increment.
+  - notes: DONE. Knob is `WLI_BUILD_TESTS` (CACHE BOOL, default ON — absent == current behavior; "build-tests" polarity, not "tests-off"). Declared beside `WLI_AMREX_MPI` in root `CMakeLists.txt`; the only gate is `if(WLI_BUILD_TESTS)` around `add_subdirectory(test)` (`add_subdirectory(src)`, `enable_testing()`, and the MPI-launcher block stay unconditional — harmless with zero test targets, and touching them risks default-tree drift). Verified: `-DWLI_BUILD_TESTS=OFF` fresh tree → ctest -N lists 0 tests, `wli_lib` builds; default tree ctest -N list identical pre/post, 26 green. Caveat for the CI-job and thorn items: the prior `add_subdirectory(test)` line number cited in old notes (`:134`) was stale — it now sits at `CMakeLists.txt:204-206`; re-locate rather than trusting recorded line numbers.
 
 - [ ] `install()` rules for `wli_lib` + all public headers, preserving the flat include convention
   - spec: specs/cactus-integration.md (§:50,57,77)
@@ -106,4 +106,7 @@ These are decisions/notes, NOT build increments — the responsible increment re
 
 ## Discovered since last plan
 
-(empty — the build loop appends new issues here; the next plan run drains it)
+- [ ] `.gitignore` hygiene: `build-cuda/` and `build-rocm/` build trees are not gitignored (only `build/`, `build-single/`, `build-mpi/`, and now `build-notests/` are), so a local GPU configure would dirty `git status`
+  - spec: none needed — repo hygiene, one-line `.gitignore` edit
+  - tests: none — `git status` stays clean after a hypothetical local GPU configure; existing suite unaffected.
+  - notes: found while adding `build-notests/` to `.gitignore` during the tests-off-switch increment (2026-07-06). Pre-existing, unrelated to that change, so recorded rather than fixed inline.

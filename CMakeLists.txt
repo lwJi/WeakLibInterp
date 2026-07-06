@@ -53,6 +53,13 @@ set(WLI_AMD_ARCH  "gfx90a" CACHE STRING "AMReX_AMD_ARCH for WLI_GPU_BACKEND=HIP"
 set(WLI_AMREX_MPI OFF CACHE BOOL
     "Build AMReX with MPI (AMReX_MPI=ON) and run the suite under the MPI launcher")
 
+# Test suite toggle. ON (default) builds and registers the full ctest suite via
+# add_subdirectory(test) — byte-for-byte the current default build. OFF is the
+# library-only / Cactus consumption path (specs/cactus-integration.md §56,77):
+# wli_lib alone is configured, with no test_* targets and no ctest wiring.
+set(WLI_BUILD_TESTS ON CACHE BOOL
+    "Build and register the ctest suite (OFF = library-only consumption build)")
+
 # ---------------------------------------------------------------------------
 # AMReX consumption mode. Empty WLI_AMREX_INSTALL_DIR (default) selects the
 # sibling-source add_subdirectory flow (byte-for-byte unchanged default build);
@@ -196,4 +203,6 @@ if(WLI_AMREX_MPI)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(test)
+if(WLI_BUILD_TESTS)
+  add_subdirectory(test)
+endif()
