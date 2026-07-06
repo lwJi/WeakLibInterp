@@ -161,6 +161,15 @@ target_link_libraries(test_brem_point PRIVATE wli_lib)
 
 add_test(NAME brem_point COMMAND test_brem_point)
 
+# Brem aligned 2D2D bilinear single-point evaluate-and-differentiate kernels
+# (src/opacity/wli_opacity_brem.H, specs/opacity-differentiate.md:65-72,104-113).
+# Header-only, synthetic 5D table, so links only wli_lib; no HDF5 needed.
+add_executable(test_brem_diff_point test_brem_diff_point.cpp)
+
+target_link_libraries(test_brem_diff_point PRIVATE wli_lib)
+
+add_test(NAME brem_diff_point COMMAND test_brem_diff_point)
+
 # Host-level ParallelFor array-form wrappers over the 15 _Point kernels
 # (src/eos/wli_eos.H, wli_eos_inversion.H, src/opacity/wli_opacity_{emab_iso,
 # nes_pair,brem}.H; specs/amrex-device-interface.md:80-88,100-102). Asserts the
@@ -390,6 +399,7 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
   wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
   wli_add_mpi_ranks(brem_point             test_brem_point)
+  wli_add_mpi_ranks(brem_diff_point        test_brem_diff_point)
   wli_add_mpi_ranks(parallelfor_wrappers   test_parallelfor_wrappers)
   wli_add_mpi_ranks(eos_reader_schema      test_eos_reader_schema)
   wli_add_mpi_ranks(opacity_reader_schema  test_opacity_reader_schema)
