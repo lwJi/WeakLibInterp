@@ -87,6 +87,76 @@ Real NESPairInterpolateSingleVariable2D2DAlignedPoint(
   return recover(f, OS);
 }
 
+// Result of the NES/Pair 2D-aligned evaluate-and-differentiate _Point kernel:
+// the recovered value plus its two in-plane partials, in physical-value units
+// per unit of each independent variable (spec:60-63). Field order mirrors
+// EmAbPointDeriv one dimension down: dDT = ∂value/∂T (DerivativeT),
+// dDX = ∂value/∂eta (DerivativeX). BOTH interpolated axes are LOG axes here
+// (T and eta arrive pre-LOG10'd), so — unlike EmAb/Iso, which has one linear
+// Ye axis — no ln10 survives in either scale factor.
+struct NESPairPointDeriv {
+  Real value;  // recovered physical kernel value (bit-identical to the evaluate)
+  Real dDT;    // ∂value/∂T   (DerivativeT)
+  Real dDX;    // ∂value/∂eta (DerivativeX)
+};
+
+// Single-point evaluate-and-differentiate of one NES/Pair two-energy kernel at
+// the fixed (iEp, iE, kernel) slice, bilinearly in the (log10 T, log10 eta)
+// plane. Same inputs/contract as NESPairInterpolateSingleVariable2D2DAlignedPoint
+// above; it shares the identical bracket/delta + 4-corner gather + BiLinear +
+// recover sequence so .value is bit-identical, then assembles the two partials
+// from the raw BiLinear partials times the per-axis chain-rule scale factors
+// (spec:79-101; oracle LinearInterpDeriv2D_4DArray_2DAligned_Point,
+// wlInterpolationUtilitiesModule.F90:875-909):
+//   ∂value/∂X_k = (value + OS) · a_k · (∂/∂d_k of the bilinear-in-log form)
+//
+// CRITICAL (differs from EmAb/Iso): BOTH interpolated axes are LOG axes (T and
+// eta arrive PRE-LOG10'd, bracketed with the Lin form on the already-log10
+// coordinate), so BOTH scale factors use the pure pre-logged form
+// a = 1/(X·(LogXs[i+1]-LogXs[i])) with X = 10**(LogX) — NO ln10 survives on
+// either axis (there is no linear sibling axis, unlike the EmAb Ye term). The
+// raw BiLinear partials take the OTHER axis's delta: dBiLineardX1 (∂/∂T) uses
+// dX (eta), dBiLineardX2 (∂/∂eta) uses dT (T). (value + OS) reconstitutes
+// 10**(bilinear); it is formed as value+OS (oracle op order), not a second pow.
+// No guards: a NaN from a non-positive T or eta propagates through value->recon
+// into BOTH derivatives.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+NESPairPointDeriv NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
+    Real LogT, Real LogX, Real const* LogTs, int nT, Real const* LogXs,
+    int nEta, int iEp, int iE, int nEp, int nE, int kernel, int nMom, Real OS,
+    Real const* table) noexcept {
+  // Brackets + deltas: both T and eta located with the LINEAR formula on their
+  // already-LOG10'd coordinates vs already-LOG10'd grids. NO log10 here.
+  auto [iT, dT] = GetIndexAndDeltaLin(LogT, LogTs, nT);
+  auto [iX, dX] = GetIndexAndDeltaLin(LogX, LogXs, nEta);
+
+  // Gather the 4 corners (identical to the evaluate kernel; (iEp,iE,kernel)
+  // FIXED, only iT/iX toggle; dX1 = dT least-significant bit).
+  amrex::GpuArray<int, 5> const n{nEp, nE, nMom, nT, nEta};
+  Real const p00 = table[flat_index<5>({iEp, iE, kernel, iT,     iX    }, n)];
+  Real const p10 = table[flat_index<5>({iEp, iE, kernel, iT + 1, iX    }, n)];
+  Real const p01 = table[flat_index<5>({iEp, iE, kernel, iT,     iX + 1}, n)];
+  Real const p11 = table[flat_index<5>({iEp, iE, kernel, iT + 1, iX + 1}, n)];
+
+  // Bilinear-in-log, universal recovery, and the reconstituted 10**(...).
+  Real const f = BiLinear(p00, p10, p01, p11, dT, dX);
+  Real const value = recover(f, OS);
+  Real const recon = value + OS;  // == 10**f (oracle op order)
+
+  // Per-axis chain-rule scale factors. BOTH T and eta are PRE-LOG10'd log axes,
+  // so both use the pre-logged form a = 1/(X·(LogXs[i+1]-LogXs[i])),
+  // X = 10**(LogX); no ln10 on either axis.
+  Real const aT = Real(1) / (std::pow(Real(10), LogT) * (LogTs[iT + 1] - LogTs[iT]));
+  Real const aX = Real(1) / (std::pow(Real(10), LogX) * (LogXs[iX + 1] - LogXs[iX]));
+
+  // Raw BiLinear partials take the OTHER axis's delta: ∂/∂T uses dX (eta),
+  // ∂/∂eta uses dT (T).
+  Real const dDT = recon * aT * dBiLineardX1(p00, p10, p01, p11, dX);
+  Real const dDX = recon * aX * dBiLineardX2(p00, p10, p01, p11, dT);
+
+  return NESPairPointDeriv{value, dDT, dDX};
+}
+
 // NES detailed-balance symmetry fill of the UPPER energy triangle (iEp > iE)
 // for one assembled kernel value (specs/opacity-nes-pair.md:148-156). The
 // aligned primitive above computes only the LOWER triangle (iEp <= iE); the

@@ -125,6 +125,15 @@ target_link_libraries(test_nes_pair_point PRIVATE wli_lib)
 
 add_test(NAME nes_pair_point COMMAND test_nes_pair_point)
 
+# NES/Pair aligned 2D2D bilinear single-point evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_nes_pair.H, specs/opacity-differentiate.md). Header-only,
+# synthetic 5D table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_nes_pair_diff_point test_nes_pair_diff_point.cpp)
+
+target_link_libraries(test_nes_pair_diff_point PRIVATE wli_lib)
+
+add_test(NAME nes_pair_diff_point COMMAND test_nes_pair_diff_point)
+
 # NES detailed-balance symmetry fill of the upper energy triangle
 # (src/opacity/wli_opacity_nes_pair.H, specs/opacity-nes-pair.md:148-156). Header-only,
 # synthetic 5D table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
@@ -377,6 +386,7 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(emab_diff_point        test_emab_diff_point)
   wli_add_mpi_ranks(iso_diff_point         test_iso_diff_point)
   wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
+  wli_add_mpi_ranks(nes_pair_diff_point    test_nes_pair_diff_point)
   wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
   wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
   wli_add_mpi_ranks(brem_point             test_brem_point)
