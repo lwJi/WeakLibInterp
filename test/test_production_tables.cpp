@@ -137,6 +137,74 @@ void run_eos(const std::string& path) {
             Real(0.0), T, Y, Ds, nD, Ts, nT, Ys, nY, OS, tbl)),
         "EOS NaN propagation on non-positive rho");
 
+  // FD cross-check of the evaluate-and-differentiate kernel (spec Verification
+  // #3, §116) against a 4th-order central difference of the value-only leaf, on
+  // the real Pressure DV. EOS axes are RAW physical (rho/T on LOG axes, Ye on
+  // the LINEAR axis; the kernel logs rho/T internally), so evalP passes the raw
+  // (D,T,Y) directly and each physical coordinate is perturbed directly. Query
+  // at the center of the first interior cell inside the FD-conditioning slope
+  // window (see kFdSlopeMin/Max above) so the FD resolves the analytic partials
+  // to the relaxed 1e-10 tier.
+  {
+    const Real kLn10 = std::log(Real(10));
+    int cD = -1, cT = -1, cY = -1;
+    for (int di = 1; di < nD - 2 && cD < 0; ++di)
+      for (int ti = 1; ti < nT - 2 && cD < 0; ++ti)
+        for (int yi = 1; yi < nY - 2; ++yi) {
+          Real L[8];
+          for (int c = 0; c < 8; ++c)
+            L[c] = tbl[static_cast<std::size_t>(di + (c & 1)) +
+                       nD * ((ti + ((c >> 1) & 1)) +
+                             nT * (yi + ((c >> 2) & 1)))];
+          const Real Yc = Real(0.5) * (Ys[yi] + Ys[yi + 1]);
+          // LOG axes (rho/T): kLn10*log10(node ratio) = ln(node ratio).
+          const Real g[3] = {
+              std::abs(mean_corner_delta(L, 3, 0)) /
+                  (kLn10 * std::log10(Ds[di + 1] / Ds[di])),
+              std::abs(mean_corner_delta(L, 3, 1)) /
+                  (kLn10 * std::log10(Ts[ti + 1] / Ts[ti])),
+              std::abs(mean_corner_delta(L, 3, 2)) * Yc /
+                  (Ys[yi + 1] - Ys[yi])};
+          if (g[0] >= kFdSlopeMin && g[0] <= kFdSlopeMax &&
+              g[1] >= kFdSlopeMin && g[1] <= kFdSlopeMax &&
+              g[2] >= kFdSlopeMin && g[2] <= kFdSlopeMax) {
+            cD = di;
+            cT = ti;
+            cY = yi;
+            break;
+          }
+        }
+    check(cD >= 0, "EOS FD: a well-conditioned interior cell exists");
+    if (cD >= 0) {
+      auto evalP = [&](Real Dp, Real Tp, Real Yp) {
+        return wli::EosInterpolateSingleVariable3DPoint(
+            Dp, Tp, Yp, Ds, nD, Ts, nT, Ys, nY, OS, tbl);
+      };
+      auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+        return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+      };
+      Real Dc = std::sqrt(Ds[cD] * Ds[cD + 1]);
+      Real Tc = std::sqrt(Ts[cT] * Ts[cT + 1]);
+      Real Yc = Real(0.5) * (Ys[cY] + Ys[cY + 1]);
+      wli::EosPointDeriv d =
+          wli::EosInterpolateDifferentiateSingleVariable3DPoint(
+              Dc, Tc, Yc, Ds, nD, Ts, nT, Ys, nY, OS, tbl);
+      Real hD = 1.0e-3 * Dc, hT = 1.0e-3 * Tc, hY = 1.0e-3 * Yc;
+      Real fdD = fd(evalP(Dc - 2 * hD, Tc, Yc), evalP(Dc - hD, Tc, Yc),
+                    evalP(Dc + hD, Tc, Yc), evalP(Dc + 2 * hD, Tc, Yc), hD);
+      Real fdT = fd(evalP(Dc, Tc - 2 * hT, Yc), evalP(Dc, Tc - hT, Yc),
+                    evalP(Dc, Tc + hT, Yc), evalP(Dc, Tc + 2 * hT, Yc), hT);
+      Real fdY = fd(evalP(Dc, Tc, Yc - 2 * hY), evalP(Dc, Tc, Yc - hY),
+                    evalP(Dc, Tc, Yc + hY), evalP(Dc, Tc, Yc + 2 * hY), hY);
+      check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂rho (1e-10)");
+      check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂T (1e-10)");
+      check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂Ye (1e-10)");
+    }
+  }
+
   // ---- EOS inversion round-trip: DEY/DPY/DSY x NoGuess/Guess (6 cells) ------
   // For each dependent-variable family, forward-evaluate X at an interior
   // off-node (D, Tstar, Y), invert back to T, and assert Error==0, T==Tstar,
