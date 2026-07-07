@@ -33,7 +33,7 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 
 - **Quiet runner:** prefix every noisy command with `tools/q` — output is stashed to `.build/logs/<cmd>.log` (kept after success, greppable); exit 0 prints one `✓` line, nonzero dumps the full log and passes the exit code through. Contract: `specs/build-integration.md` "Quiet-runner workflow".
 - **Validate specs:** `AMREX_ROOT=../amrex tools/q bash specs/tools/validate_specs.sh`
-- **Configure:** `tools/q cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- **Configure:** `tools/q cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`. If it fails on a stale `CMakeCache` pinned to a foreign compiler (recurring on this host: `/opt/homebrew/bin/mpicxx`), wipe `build/` and reconfigure with `CXX=g++ CC=gcc`.
 - **Build:** `tools/q cmake --build build -j4` (cap `-j`; uncapped AMReX builds OOM this host). After adding a new test target to `test/CMakeLists.txt`, re-run configure first — the incremental build won't see it.
 - **Test:** `tools/q ctest --test-dir build --output-on-failure`. Real-table cells (`production_tables`) SKIP without live tables — before committing changes to them, also run with `WL_TABLES_ROOT=/Users/liwei/Datas/wl_tables/use_for_production` (this host's copy).
 - **Thorn check:** `tools/q bash specs/tools/validate_thorn.sh` after touching `cactus/thorns/WeakLibInterp/` (structural gate, not in ctest; in-Cactus acceptance stays manual — no Cactus checkout here).

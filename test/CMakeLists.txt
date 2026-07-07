@@ -287,6 +287,33 @@ endif()
 
 add_test(NAME emab_legacy_fallback COMMAND test_emab_legacy_fallback)
 
+# Standalone WL_TABLES_ROOT-guarded round-trip layout test
+# (spec: table-format-and-io.md:180, Verification #2). Addresses one interior
+# element of a 3D EOS DV sub-table via the column-major flat-offset formula
+# (Path A: read_eos_table + wli::flat_index) and via an INDEPENDENT raw HDF5
+# hyperslab at the reversed C-order index (Path B), asserting exact ==. SKIPs
+# (exit 77) when WL_TABLES_ROOT is unset / the EOS table is absent, so the
+# default build/ suite stays green. Links the C++ (and C) HDF5 bindings like the
+# other live-reader tests, since it both calls the reader and opens the file raw.
+add_executable(test_layout_roundtrip test_layout_roundtrip.cpp)
+
+target_link_libraries(test_layout_roundtrip PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_layout_roundtrip PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_layout_roundtrip PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_layout_roundtrip PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_layout_roundtrip PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+add_test(NAME layout_roundtrip COMMAND test_layout_roundtrip)
+
+set_tests_properties(layout_roundtrip PROPERTIES SKIP_RETURN_CODE 77)
+
 # MPI root-read + broadcast tests (specs/table-format-and-io.md:183-184). One
 # executable, two modes: "open" (non-root ranks never open the .h5; loads are
 # byte-identical across ranks) and "fail" (root-side open failure surfaces as
@@ -427,6 +454,7 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(coverage_matrix        test_coverage_matrix)
   wli_add_mpi_ranks(perturbation_meta      test_perturbation_meta)
   wli_add_mpi_ranks(production_tables      test_production_tables)
+  wli_add_mpi_ranks(layout_roundtrip       test_layout_roundtrip)
 
   # The root-read/broadcast tests already run at 2 ranks (mpi_root_open*, above);
   # add their 4-rank vehicle so the whole suite genuinely runs at both counts.
