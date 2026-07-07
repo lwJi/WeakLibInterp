@@ -89,3 +89,14 @@ A fresh agent confirms the build/integration contract is met by these self-conta
 - **`amrex::Real` configuration (assumption, non-blocking).** The contract pins the value type to `double` independently of `amrex::Real`; if an AMReX build sets `amrex::Real = float`, the interpolator's tables and entry points still use `double`. This is a stated requirement the build must enforce, not a property AMReX guarantees.
 - **AMReX source location (assumption, non-blocking).** The sibling `amrex` repo is the available source in this environment; a build elsewhere may point at an installed AMReX or a different checkout. The contract is the CPU-only / double-precision configuration and the header surface above, not a specific path.
 - **No Fortran/Matlab toolchain (assumption, non-blocking).** This environment has no Fortran/Matlab build capability, and the contract requires none: the library is pure C++/AMReX. See `regression-suite-design.md`.
+
+## Quiet-runner workflow (`tools/q`)
+
+A workflow contract (not a correctness requirement on the library): every noisy build/test/validate command in the agent loop runs through the committed wrapper `tools/q <command> [args...]`, which keeps command output out of the agent's context unless it is needed.
+
+- **Exit-code passthrough.** The wrapper exits with the child's exit code unchanged — ctest semantics (including `SKIP_RETURN_CODE 77` cells), CI step gating, and `&&`-chaining are unaffected. No arguments is usage + exit 2.
+- **Silence on success.** Child exit 0 → the wrapper prints exactly one line, `✓ <command as invoked> (<duration>)`, and nothing else. No warnings, skip counts, or log excerpts are surfaced.
+- **Full dump on failure.** Child exit ≠ 0 → the wrapper prints `✗ <command> (exit N, <duration>)` followed by the complete stashed output (stdout+stderr, merged, in order) between delimiters that name the log path.
+- **Stash location.** `.build/logs/<basename-of-command>.log` (repo-relative; a leading `bash`/`sh` interpreter is skipped when naming), overwritten per invocation and **kept after success** so the last run stays inspectable (e.g. grepping the last passing build for warnings — the accepted blind spot of silence-on-success). `.build/` is agent scratch and gitignored.
+- **Transparency.** The wrapper does nothing but redirect: no `cd`, no environment manipulation — `WL_TABLES_ROOT=… tools/q ctest …` behaves identically to the unwrapped command.
+- **Scope.** The `CLAUDE.md` Build & run commands and the `docs/BUILD.md` variant-tree commands are documented `tools/q`-prefixed; `.github/workflows/ci.yml` deliberately stays unwrapped (CI log storage is free and full logs aid post-mortems).
