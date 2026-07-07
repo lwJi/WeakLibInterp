@@ -45,10 +45,10 @@ Current state: mature and largely spec-complete. All eight device entry-point fa
 
 ## Tier 10 — Hygiene & de-duplication
 
-- [ ] De-duplicate the EOS reader-schema parser into `h5ls_snapshot.H`
+- [x] De-duplicate the EOS reader-schema parser into `h5ls_snapshot.H`
   - spec: regression-suite-design.md + CLAUDE.md anti-duplication discipline (consolidated implementations over ad-hoc copies)
   - tests: the existing `test_eos_reader_schema` target passes unchanged after switching to `#include "h5ls_snapshot.H"` and deleting the inline copy (it already validates `schema::` expectations against `specs/fixtures/*.h5ls`).
-  - notes: `test/h5ls_snapshot.H:6-10` claims it was factored out so EOS and opacity structural self-tests share ONE parser, but `test/test_eos_reader_schema.cpp:14-143` still carries the full inline duplicate (own `g_failures`, `check`, `Entry`, `unescape`, `parse_line`, `load_snapshot`, `expect_dataset`, …) and never includes the shared header; only `test_opacity_reader_schema.cpp` consumes it. Pure de-duplication, no behavior change.
+  - notes: DONE (2026-07-07, build loop): deleted the full inline duplicate (former `test_eos_reader_schema.cpp:24-143` anonymous-namespace body) and switched to `#include "h5ls_snapshot.H"` + using-declarations for `h5ls::{Entry,check,expect_dataset,expect_group,expect_offsets,load_snapshot}`, mirroring `test_opacity_reader_schema.cpp:19-28`; exit-code checks now read `h5ls::g_failures`. Bonus consolidation the shared header enabled: the hand-rolled `/DependentVariables/Offsets` rank-1/length block folded into one `expect_offsets(m, ".../Offsets", {S::kNVariables})` (behavior-identical). No src/specs/CMake change; incremental build, no reconfigure needed (and no stale-CMakeCache quirk this iteration). Default tree 32/32 green (7 guarded cells SKIP as expected). `h5ls_snapshot.H` is now genuinely the single parser, as its header comment claims.
 
 - [ ] `.gitignore`: add the missing variant build trees
   - spec: none needed — repo hygiene; `docs/BUILD.md:13-20` lists six variant trees, each needing "its own gitignored tree"

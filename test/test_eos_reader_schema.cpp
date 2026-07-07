@@ -13,132 +13,21 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <map>
-#include <sstream>
 #include <string>
 #include <vector>
 
+#include "h5ls_snapshot.H"
 #include "wli_io_eos.H"
 
 namespace {
 
-int g_failures = 0;
-
-void check(bool ok, const std::string& msg) {
-  if (!ok) {
-    std::fprintf(stderr, "FAIL: %s\n", msg.c_str());
-    ++g_failures;
-  }
-}
-
-// A parsed h5ls entry: object type and (for datasets) its h5ls C-order shape.
-struct Entry {
-  bool is_dataset = false;
-  std::vector<int> shape;  // empty for groups
-};
-
-// Unescape the h5ls path field: "\ " -> " " (h5ls escapes spaces in names).
-std::string unescape(const std::string& in) {
-  std::string out;
-  out.reserve(in.size());
-  for (std::size_t i = 0; i < in.size(); ++i) {
-    if (in[i] == '\\' && i + 1 < in.size() && in[i + 1] == ' ') {
-      out.push_back(' ');
-      ++i;
-    } else {
-      out.push_back(in[i]);
-    }
-  }
-  return out;
-}
-
-std::string rtrim(const std::string& s) {
-  const std::size_t e = s.find_last_not_of(" \t");
-  return e == std::string::npos ? std::string() : s.substr(0, e + 1);
-}
-
-// Parse "{30, 81, 185}" -> {30,81,185}.
-std::vector<int> parse_shape(const std::string& braces) {
-  std::vector<int> out;
-  const std::size_t lo = braces.find('{');
-  const std::size_t hi = braces.find('}');
-  if (lo == std::string::npos || hi == std::string::npos || hi <= lo) return out;
-  std::string inner = braces.substr(lo + 1, hi - lo - 1);
-  for (char& c : inner) {
-    if (c == ',') c = ' ';
-  }
-  std::istringstream iss(inner);
-  int v;
-  while (iss >> v) out.push_back(v);
-  return out;
-}
-
-// Parse an h5ls -r line into (path, Entry). Locates the whole-word type token
-// " Dataset" / " Group"; everything before it (trimmed, unescaped) is the path.
-bool parse_line(const std::string& line, std::string& path, Entry& e) {
-  const std::size_t dpos = line.find(" Dataset");
-  const std::size_t gpos = line.find(" Group");
-  if (dpos != std::string::npos) {
-    path = unescape(rtrim(line.substr(0, dpos)));
-    e.is_dataset = true;
-    e.shape = parse_shape(line.substr(dpos));
-    return true;
-  }
-  if (gpos != std::string::npos) {
-    path = unescape(rtrim(line.substr(0, gpos)));
-    e.is_dataset = false;
-    return true;
-  }
-  return false;
-}
-
-std::map<std::string, Entry> load_snapshot(const std::string& file) {
-  std::map<std::string, Entry> m;
-  std::ifstream in(file);
-  if (!in) {
-    std::fprintf(stderr, "FAIL: cannot open snapshot %s\n", file.c_str());
-    ++g_failures;
-    return m;
-  }
-  std::string line;
-  while (std::getline(in, line)) {
-    if (rtrim(line).empty()) continue;
-    std::string path;
-    Entry e;
-    if (parse_line(line, path, e)) m[path] = e;
-  }
-  return m;
-}
-
-// Assert a dataset exists with the exact expected h5ls shape.
-void expect_dataset(const std::map<std::string, Entry>& m, const std::string& path,
-                    const std::vector<int>& shape) {
-  auto it = m.find(path);
-  if (it == m.end()) {
-    check(false, "missing dataset " + path);
-    return;
-  }
-  check(it->second.is_dataset, path + " is not a Dataset");
-  if (it->second.shape != shape) {
-    std::string got = "{";
-    for (std::size_t i = 0; i < it->second.shape.size(); ++i) {
-      got += std::to_string(it->second.shape[i]);
-      if (i + 1 < it->second.shape.size()) got += ",";
-    }
-    got += "}";
-    check(false, path + " shape mismatch, snapshot=" + got);
-  }
-}
-
-void expect_group(const std::map<std::string, Entry>& m, const std::string& path) {
-  auto it = m.find(path);
-  if (it == m.end()) {
-    check(false, "missing group " + path);
-    return;
-  }
-  check(!it->second.is_dataset, path + " is not a Group");
-}
+using h5ls::Entry;
+using h5ls::check;
+using h5ls::expect_dataset;
+using h5ls::expect_group;
+using h5ls::expect_offsets;
+using h5ls::load_snapshot;
 
 }  // namespace
 
@@ -188,17 +77,7 @@ int main() {
   // --- /DependentVariables scalar/1D metadata.
   //     Offsets MUST be rank-1 length nVariables (guards 1D-vs-2D, spec:162).
   expect_dataset(m, "/DependentVariables/nVariables", {1});
-  {
-    auto it = m.find("/DependentVariables/Offsets");
-    check(it != m.end() && it->second.is_dataset, "missing /DependentVariables/Offsets");
-    if (it != m.end()) {
-      check(it->second.shape.size() == 1,
-            "/DependentVariables/Offsets must be rank-1 (1D offsets), rank=" +
-                std::to_string(it->second.shape.size()));
-      check(it->second.shape.size() == 1 && it->second.shape[0] == S::kNVariables,
-            "/DependentVariables/Offsets length must equal nVariables=15");
-    }
-  }
+  expect_offsets(m, "/DependentVariables/Offsets", {S::kNVariables});
   expect_dataset(m, "/DependentVariables/Names", {S::kNVariables});
   expect_dataset(m, "/DependentVariables/Units", {S::kNVariables});
   expect_dataset(m, "/DependentVariables/Dimensions", {3});
@@ -241,8 +120,9 @@ int main() {
     expect_dataset(m, std::string("/Metadata/") + md, {1});
   }
 
-  if (g_failures != 0) {
-    std::fprintf(stderr, "FAIL eos_reader_schema: %d check(s) failed\n", g_failures);
+  if (h5ls::g_failures != 0) {
+    std::fprintf(stderr, "FAIL eos_reader_schema: %d check(s) failed\n",
+                 h5ls::g_failures);
     return EXIT_FAILURE;
   }
   std::printf(
