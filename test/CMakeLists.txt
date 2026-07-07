@@ -266,6 +266,27 @@ add_test(NAME production_tables COMMAND test_production_tables)
 
 set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
 
+# Always-on serial test of the /EmAb_CorrectedAbsorption legacy-group fallback
+# in read_emab_table (spec: table-format-and-io.md:182). Writes a synthetic
+# fixture lacking /EmAb, calls the live reader, and asserts usedLegacyGroup and
+# read-back parity. Links the C++ (and C) HDF5 bindings like the readers do.
+add_executable(test_emab_legacy_fallback test_emab_legacy_fallback.cpp)
+
+target_link_libraries(test_emab_legacy_fallback PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_emab_legacy_fallback PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_emab_legacy_fallback PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_emab_legacy_fallback PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_emab_legacy_fallback PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+add_test(NAME emab_legacy_fallback COMMAND test_emab_legacy_fallback)
+
 # MPI root-read + broadcast tests (specs/table-format-and-io.md:183-184). One
 # executable, two modes: "open" (non-root ranks never open the .h5; loads are
 # byte-identical across ranks) and "fail" (root-side open failure surfaces as

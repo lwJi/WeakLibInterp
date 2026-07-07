@@ -13,10 +13,10 @@ Current state: mature and largely spec-complete. All eight device entry-point fa
 
 ## Tier 9 — Spec-verification coverage & parity reconciliation
 
-- [ ] Exercise the `/EmAb_CorrectedAbsorption` legacy fallback
+- [x] Exercise the `/EmAb_CorrectedAbsorption` legacy fallback
   - spec: table-format-and-io.md (§:182, Verification #4) — explicitly calls for a synthetic/legacy fixture lacking `/EmAb`
   - tests: a synthetic EmAb fixture written under `/EmAb_CorrectedAbsorption` only (no `/EmAb`) reads successfully via `read_emab_table`, asserts `t.usedLegacyGroup == true`, and read-back values match what was written. Always-on serial test in the default tree (spec does not gate #4 on MPI).
-  - notes: the fallback is implemented (`src/io/wli_io_opacity.cpp:152-157`, sets `t.usedLegacyGroup`) and even digested (`test/wli_rank_digest.H:116`), but no test constructs a fixture lacking `/EmAb` — `test/test_rank_consistency.cpp:210-213` (`write_synthetic_emab`) always writes `/EmAb`; grep for `EmAb_CorrectedAbsorption` across `test/` = 0 hits. The branch is dead from the suite's perspective. Plan-run update (2026-07-07): prefer a NEW always-on serial test target reusing the `write_common`/`write_synthetic_emab` pattern (now at `test_rank_consistency.cpp:146-222`) with the group name swapped; register it in `test/CMakeLists.txt` and re-run configure before building.
+  - notes: DONE (2026-07-07, build loop): new `test/test_emab_legacy_fallback.cpp` (always-on serial, registered at `test/CMakeLists.txt:269-289`, no SKIP_RETURN_CODE) writes the fixture under `wli::io::schema::emab::kLegacyGroup` only, asserts `usedLegacyGroup==true`, `nOpacities==2`, `offset=={1.0,2.0}`, byte-identical (`==`) value read-back for both species, speciesNames, `hasEmAbParameters==false`, `hasECTable==false`. Fixture-writer helpers are per-TU duplicates from `test_rank_consistency.cpp` by design (no shared writer header; `src/io/` stays read-only). Default tree is now 31 tests, all green. Iteration quirk: the pre-existing `build/` CMakeCache was stale from a prior host (pointed at /opt/homebrew mpicxx) — wiped and reconfigured with explicit `-DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc`; one-off recovery, not a durable command change.
 
 - [ ] Round-trip layout check against a real table (dataset value vs flat-offset formula)
   - spec: table-format-and-io.md (§:180, Verification #2) — address an element by the flat-offset formula and confirm it matches the independently-addressed value at the corresponding C-order index
