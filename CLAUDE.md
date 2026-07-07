@@ -22,6 +22,8 @@
 - `specs/*` — acceptance source of truth (WHAT must hold). `specs/tools/`, `specs/fixtures/`.
 - `src/*` — the shared standard library, organized AMReX-style into module dirs `src/{core,eos,opacity,io}/`; every module dir is on the include path, so includes stay flat (`#include "wli_eos.H"`) and the `wli_` filename prefix is the namespace (mirroring `<AMReX_*.H>`). The opacity kernels are one header per opacity leaf spec (`wli_opacity_{emab_iso,nes_pair,brem}.H`) with `wli_opacity.H` as the umbrella.
 - `test/*` — the regression suite: one `test_*.cpp` per ctest target, registered in `test/CMakeLists.txt` (hand-rolled assert harness, no GoogleTest/Catch2; `SKIP_RETURN_CODE 77` for guarded cells); `h5ls_snapshot.H` is a test-only fixture parser; `wli_rank_digest.H` is the test-only cross-rank digest header (FNV-1a `wli::test::Hasher` + `digest()` overloads for all six host-table structs) — MPI consistency tests include it rather than re-inlining a hasher.
+- `cactus/thorns/WeakLibInterp/` — the ExternalLibraries-style Cactus thorn (`configuration.ccl` + `src/{detect.sh,build.sh,make.code.deps}`) that finds-or-builds this repo's installed library; structural gate is `specs/tools/validate_thorn.sh` (not in ctest; in-Cactus acceptance stays manual).
+- `docs/BUILD.md` — variant-build & CI detail; `tools/q` — the quiet-runner wrapper prefixing every documented command.
 - `TODO.md` — the durable, priority-sorted plan; the only state carried between loop iterations. Completed items are marked `- [x]` in place by the build loop (never removed); they are pruned only when the plan loop recreates the file.
 - Sibling repos (read-only sources of truth): `../amrex` (device interface), `../weaklib` and `../thornado` (Fortran behavior being reimplemented).
 
