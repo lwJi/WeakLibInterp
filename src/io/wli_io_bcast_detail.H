@@ -106,7 +106,18 @@ inline void bcast_array(std::array<int, N>& a) {
 }
 
 // Size-prefixed vector broadcast: send the count first so non-root ranks resize
-// before receiving the payload, then send the payload.
+// before receiving the payload, then send the payload. Covers both overloads.
+//
+// The `static_cast<int>(v.size())` narrows std::size_t -> int, so a dataset with
+// > 2^31-1 elements (the MPI int count limit) would overflow. Per spec:171
+// requirement 7 such a dataset is broadcast in chunks; that chunk loop is
+// DEFERRED here (a deliberate, spec-acknowledged deferral, not an oversight)
+// because every pinned production dataset is far below the limit. The largest is
+// the NES/Pair `Kernels {120,81,4,40,40}` = 62,208,000 doubles (~6.2e7), two
+// orders below 2^31-1 (~2.1e9); provenance for the pinned set is
+// specs/fixtures/tables.provenance. If a table ever exceeds the limit, the chunk
+// loop would replace the single payload Bcast below (split the count into
+// int-sized spans, broadcast each with a rebased data() pointer).
 inline void bcast_vector(std::vector<double>& v) {
   int n = static_cast<int>(v.size());
   amrex::ParallelDescriptor::Bcast<int>(&n, 1, io_root());
