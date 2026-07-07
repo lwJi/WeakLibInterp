@@ -41,4 +41,4 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 
 ## Self-improvement
 
-If a loop iteration discovers how to compile, run, or test the project — or a correction to anything above — record it by heat: everyday-cycle commands and host quirks go in Build & run above (keep that section under ~15 lines); variant-build and CI detail goes in `docs/BUILD.md`. Commands and how-to-run only, terse; progress belongs in `TODO.md`.
+If a loop iteration discovers how to compile, run, or test the project — or a correction to anything above — record it by heat: everyday-cycle commands and host quirks go in Build & run above (keep that section under ~15 lines); variant-build and CI detail goes in `docs/BUILD.md`. In `docs/BUILD.md`, record mechanisms, not inventories: append to the matching variant's bullet group or CI bullet, never a new top-level section; no test/header counts or other now-values that drift. Commands and how-to-run only, terse; progress belongs in `TODO.md`.
