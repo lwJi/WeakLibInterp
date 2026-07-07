@@ -32,7 +32,7 @@ Per `specs/build-integration.md` the target is **AMReX CPU-only, double precisio
 - **Validate specs:** `AMREX_ROOT=../amrex bash specs/tools/validate_specs.sh`
 - **Configure:** `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
 - **Build:** `cmake --build build -j4` (cap `-j`; uncapped AMReX builds OOM this host). After adding a new test target to `test/CMakeLists.txt`, re-run configure first — the incremental build won't see it.
-- **Test:** `ctest --test-dir build --output-on-failure`
+- **Test:** `ctest --test-dir build --output-on-failure`. Real-table cells (`production_tables`) SKIP without live tables — before committing changes to them, also run with `WL_TABLES_ROOT=/Users/liwei/Datas/wl_tables/use_for_production` (this host's copy).
 - **Thorn check:** `bash specs/tools/validate_thorn.sh` after touching `cactus/thorns/WeakLibInterp/` (structural gate, not in ctest; in-Cactus acceptance stays manual — no Cactus checkout here).
 - Host prerequisites (apt, reinstall if the sandbox resets): `cmake`, `g++`, `libhdf5-dev`. Never install Fortran/Matlab. Do not enable `AMReX_HDF5` — HDF5 is found independently.
 
