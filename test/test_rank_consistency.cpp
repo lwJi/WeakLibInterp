@@ -590,6 +590,22 @@ int test_corrupt() {
   // broadcast, then re-run the SAME comparator. Root's broadcast digest stays
   // clean, so the divergence must surface as an inconsistency.
   const int victim = (pd::IOProcessorNumber() + 1) % pd::NProcs();  // != root
+
+  // Stage 1: perturb a previously-unfolded dvIndices member ALONE (no values
+  // mutation active yet). This exercises the newly-added fold coverage of all 15
+  // HostDVIndices independently — iInternalEnergyDensity was NOT folded before,
+  // so this divergence is only caught because digest() now folds it
+  // (spec table-format-and-io §183 Verification #5).
+  if (pd::MyProc() == victim) {
+    t.dvIndices.iInternalEnergyDensity += 1;  // flip one previously-unfolded slot
+  }
+  const bool dvindices_consistent = ranks_agree(digest(t));
+  // Restore so the next stage isolates the values-array divergence.
+  if (pd::MyProc() == victim) {
+    t.dvIndices.iInternalEnergyDensity -= 1;
+  }
+
+  // Stage 2: the original positive control — flip one broadcast array element.
   if (pd::MyProc() == victim && !t.dv.empty() && !t.dv[0].values.empty()) {
     t.dv[0].values[0] += 1.0;  // flip one broadcast array element
   }
@@ -604,6 +620,13 @@ int test_corrupt() {
       std::fprintf(stderr,
                    "FAIL corrupt: baseline (un-corrupted) load reported "
                    "inconsistent — comparator or fixture is broken\n");
+      rc = 1;
+    }
+    if (dvindices_consistent) {
+      std::fprintf(stderr,
+                   "FAIL corrupt: a one-rank dvIndices corruption "
+                   "(iInternalEnergyDensity) was NOT detected — digest() does "
+                   "not fold all 15 HostDVIndices\n");
       rc = 1;
     }
     if (corrupted_consistent) {
