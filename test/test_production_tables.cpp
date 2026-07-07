@@ -219,6 +219,48 @@ void run_emab(const std::string& path) {
             std::nan(""), LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
             LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
         "EmAb NaN propagation on a NaN LogE argument");
+
+  // FD cross-check of the evaluate-and-differentiate kernel against a 4th-order
+  // central difference of the value-only leaf. Axes are pre-log10'd, so perturb
+  // the PHYSICAL coordinate X*(1±h) and recompute LogX = log10(X) (∂value/∂X,
+  // not ∂value/∂LogX). E/rho/T are LOG axes; Ye is the one LINEAR axis (perturbed
+  // directly). Query at an interior cell CENTER to stay comfortably inside one
+  // bracket cell, away from the node kinks of the piecewise-multilinear interp.
+  {
+    auto evalP = [&](Real E, Real D, Real T, Real Y) {
+      return wli::EmAbInterpolateSingleVariable4DPoint(
+          std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real E = std::pow(Real(10), Real(0.5) * (LogEs[iE] + LogEs[iE + 1]));
+    Real D = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real Y = Real(0.5) * (Ys[iY] + Ys[iY + 1]);
+    wli::EmAbPointDeriv d =
+        wli::EmAbInterpolateDifferentiateSingleVariable4DPoint(
+            std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
+    Real hE = 1.0e-3 * E, hD = 1.0e-3 * D, hT = 1.0e-3 * T, hY = 1.0e-3 * Y;
+    Real fdE = fd(evalP(E - 2 * hE, D, T, Y), evalP(E - hE, D, T, Y),
+                  evalP(E + hE, D, T, Y), evalP(E + 2 * hE, D, T, Y), hE);
+    Real fdD = fd(evalP(E, D - 2 * hD, T, Y), evalP(E, D - hD, T, Y),
+                  evalP(E, D + hD, T, Y), evalP(E, D + 2 * hD, T, Y), hD);
+    Real fdT = fd(evalP(E, D, T - 2 * hT, Y), evalP(E, D, T - hT, Y),
+                  evalP(E, D, T + hT, Y), evalP(E, D, T + 2 * hT, Y), hT);
+    Real fdY = fd(evalP(E, D, T, Y - 2 * hY), evalP(E, D, T, Y - hY),
+                  evalP(E, D, T, Y + hY), evalP(E, D, T, Y + 2 * hY), hY);
+    check(wli::is_close(d.dDE, fdE, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂E (1e-10)");
+    check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂rho (1e-10)");
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂T (1e-10)");
+    check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂Ye (1e-10)");
+  }
 }
 
 void run_iso(const std::string& path) {
@@ -271,6 +313,47 @@ void run_iso(const std::string& path) {
             LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
             tbl)),
         "Iso NaN propagation on a NaN LogE argument");
+
+  // FD cross-check: perturb the PHYSICAL coordinate and recompute LogX (axes are
+  // pre-log10'd). E/rho/T are LOG axes; Ye is the one LINEAR axis. Query at an
+  // interior cell center, away from node kinks.
+  {
+    auto evalP = [&](Real E, Real D, Real T, Real Y) {
+      return wli::IsoInterpolateSingleVariable5DPoint(
+          std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+          tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real E = std::pow(Real(10), Real(0.5) * (LogEs[iE] + LogEs[iE + 1]));
+    Real D = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real Y = Real(0.5) * (Ys[iY] + Ys[iY + 1]);
+    wli::IsoPointDeriv d =
+        wli::IsoInterpolateDifferentiateSingleVariable5DPoint(
+            std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl);
+    Real hE = 1.0e-3 * E, hD = 1.0e-3 * D, hT = 1.0e-3 * T, hY = 1.0e-3 * Y;
+    Real fdE = fd(evalP(E - 2 * hE, D, T, Y), evalP(E - hE, D, T, Y),
+                  evalP(E + hE, D, T, Y), evalP(E + 2 * hE, D, T, Y), hE);
+    Real fdD = fd(evalP(E, D - 2 * hD, T, Y), evalP(E, D - hD, T, Y),
+                  evalP(E, D + hD, T, Y), evalP(E, D + 2 * hD, T, Y), hD);
+    Real fdT = fd(evalP(E, D, T - 2 * hT, Y), evalP(E, D, T - hT, Y),
+                  evalP(E, D, T + hT, Y), evalP(E, D, T + 2 * hT, Y), hT);
+    Real fdY = fd(evalP(E, D, T, Y - 2 * hY), evalP(E, D, T, Y - hY),
+                  evalP(E, D, T, Y + hY), evalP(E, D, T, Y + 2 * hY), hY);
+    check(wli::is_close(d.dDE, fdE, wli::rtol_relaxed, wli::atol_default),
+          "Iso FD cross-check ∂value/∂E (1e-10)");
+    check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+          "Iso FD cross-check ∂value/∂rho (1e-10)");
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "Iso FD cross-check ∂value/∂T (1e-10)");
+    check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+          "Iso FD cross-check ∂value/∂Ye (1e-10)");
+  }
 }
 
 void run_nespair(const std::string& path, bool nes) {
@@ -331,6 +414,35 @@ void run_nespair(const std::string& path, bool nes) {
             std::nan(""), LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, iEp,
             iE, nEp, nE, kernel, nMom, OS, tbl)),
         tag + " NaN propagation on a NaN LogT argument");
+
+  // FD cross-check: BOTH (T, eta) are LOG axes — perturb the PHYSICAL coordinate
+  // and recompute the log (T in MeV, eta the physical degeneracy). Query at an
+  // interior cell center, away from node kinks.
+  {
+    auto evalP = [&](Real T, Real X) {
+      return wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+          std::log10(T), std::log10(X), LogTs.data(), nT, LogXs.data(), nEta,
+          iEp, iE, nEp, nE, kernel, nMom, OS, tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real X = std::pow(Real(10), Real(0.5) * (LogXs[iX] + LogXs[iX + 1]));
+    wli::NESPairPointDeriv d =
+        wli::NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
+            std::log10(T), std::log10(X), LogTs.data(), nT, LogXs.data(), nEta,
+            iEp, iE, nEp, nE, kernel, nMom, OS, tbl);
+    Real hT = 1.0e-3 * T, hX = 1.0e-3 * X;
+    Real fdT = fd(evalP(T - 2 * hT, X), evalP(T - hT, X), evalP(T + hT, X),
+                  evalP(T + 2 * hT, X), hT);
+    Real fdX = fd(evalP(T, X - 2 * hX), evalP(T, X - hX), evalP(T, X + hX),
+                  evalP(T, X + 2 * hX), hX);
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          tag + " FD cross-check ∂value/∂T (1e-10)");
+    check(wli::is_close(d.dDX, fdX, wli::rtol_relaxed, wli::atol_default),
+          tag + " FD cross-check ∂value/∂eta (1e-10)");
+  }
 }
 
 void run_brem(const std::string& path) {
@@ -380,6 +492,49 @@ void run_brem(const std::string& path) {
             std::nan(""), LogTs[iT], LogDs.data(), nD, LogTs.data(), nT, iEp, iE,
             nEp, nE, moment, nMom, OS, tbl)),
         "Brem NaN propagation on a NaN LogD argument");
+
+  // FD cross-check of the single-effective-density differentiate kernel. BOTH
+  // (rho, T) are LOG axes (rho BEFORE T — the Brem transpose); perturb the
+  // PHYSICAL coordinate and recompute the log. Query at an interior cell center,
+  // away from node kinks.
+  {
+    auto evalP = [&](Real D, Real T) {
+      return wli::BremInterpolateSingleDensity2DAlignedPoint(
+          std::log10(D), std::log10(T), LogDs.data(), nD, LogTs.data(), nT, iEp,
+          iE, nEp, nE, moment, nMom, OS, tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real D = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    wli::BremPointDeriv d =
+        wli::BremInterpolateSingleDensityDifferentiate2DAlignedPoint(
+            std::log10(D), std::log10(T), LogDs.data(), nD, LogTs.data(), nT,
+            iEp, iE, nEp, nE, moment, nMom, OS, tbl);
+    Real hD = 1.0e-3 * D, hT = 1.0e-3 * T;
+    Real fdD = fd(evalP(D - 2 * hD, T), evalP(D - hD, T), evalP(D + hD, T),
+                  evalP(D + 2 * hD, T), hD);
+    Real fdT = fd(evalP(D, T - 2 * hT), evalP(D, T - hT), evalP(D, T + hT),
+                  evalP(D, T + 2 * hT), hT);
+    check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+          "Brem FD cross-check ∂value/∂rho (1e-10)");
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "Brem FD cross-check ∂value/∂T (1e-10)");
+
+    // Summed differentiate kernel: value/dDT are populated (linearity), dDrho is
+    // 0 by design (base-density chain rule is consumer-side, spec:104-113). Use a
+    // single effective density so the sum reduces to Alpha*single-density.
+    Real LogDspec[1] = {std::log10(D)};
+    Real Alpha[1] = {Real(1)};
+    wli::BremPointDeriv ds =
+        wli::BremInterpolateSingleVariable2D2DAlignedSummedDifferentiatePoint(
+            LogDspec, Alpha, 1, std::log10(T), LogDs.data(), nD, LogTs.data(),
+            nT, iEp, iE, nEp, nE, moment, nMom, OS, tbl);
+    check(wli::is_close(ds.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "Brem summed FD cross-check ∂value/∂T (1e-10)");
+    check(ds.dDrho == Real(0), "Brem summed dDrho stays 0 by design");
+  }
 }
 
 // Probe + run one channel; returns true iff the table was present.

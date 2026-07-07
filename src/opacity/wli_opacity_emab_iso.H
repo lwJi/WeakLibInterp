@@ -398,6 +398,23 @@ inline void EmAbInterpolateSingleVariable4D(
   });
 }
 
+// Array EmAb evaluate-and-differentiate over
+// EmAbInterpolateDifferentiateSingleVariable4DPoint. out[p] = the
+// {value,dDE,dDrho,dDT,dDY} struct.
+inline void EmAbInterpolateDifferentiateSingleVariable4D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, Real OS, TableView<4> const& view,
+    EmAbPointDeriv* out) noexcept {
+  int const nE = view.n[0], nD = view.n[1], nT = view.n[2], nY = view.n[3];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = EmAbInterpolateDifferentiateSingleVariable4DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        OS, table);
+  });
+}
+
 // Array Iso evaluate over IsoInterpolateSingleVariable5DPoint at fixed iMom.
 inline void IsoInterpolateSingleVariable5D(
     int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
@@ -409,6 +426,24 @@ inline void IsoInterpolateSingleVariable5D(
   double const* table = view.data;
   amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
     out[p] = IsoInterpolateSingleVariable5DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        iMom, nMom, OS, table);
+  });
+}
+
+// Array Iso evaluate-and-differentiate over
+// IsoInterpolateDifferentiateSingleVariable5DPoint at fixed iMom. out[p] = the
+// {value,dDE,dDrho,dDT,dDY} struct.
+inline void IsoInterpolateDifferentiateSingleVariable5D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, int iMom, Real OS, TableView<5> const& view,
+    IsoPointDeriv* out) noexcept {
+  int const nE = view.n[0], nMom = view.n[1], nD = view.n[2], nT = view.n[3],
+            nY = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = IsoInterpolateDifferentiateSingleVariable5DPoint(
         LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
         iMom, nMom, OS, table);
   });

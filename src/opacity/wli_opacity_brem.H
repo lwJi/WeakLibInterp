@@ -299,4 +299,41 @@ inline void BremInterpolateSingleVariable2D2DAlignedSummed(
   });
 }
 
+// Array single-effective-density evaluate-and-differentiate over
+// BremInterpolateSingleDensityDifferentiate2DAlignedPoint. out[p] = the
+// {value,dDrho,dDT} struct; only LogD[p]/LogT[p] vary per point.
+inline void BremInterpolateSingleDensityDifferentiate2DAligned(
+    int npoints, Real const* LogD, Real const* LogT, Real const* LogDs,
+    Real const* LogTs, int iEp, int iE, int moment, Real OS,
+    TableView<5> const& view, BremPointDeriv* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nD = view.n[3],
+            nT = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = BremInterpolateSingleDensityDifferentiate2DAlignedPoint(
+        LogD[p], LogT[p], LogDs, nD, LogTs, nT, iEp, iE, nEp, nE, moment, nMom,
+        OS, table);
+  });
+}
+
+// Array summed evaluate-and-differentiate over
+// BremInterpolateSingleVariable2D2DAlignedSummedDifferentiatePoint. The per-
+// species LogD[nSpecies]/Alpha[nSpecies]/nSpecies are batch-shared (the inner
+// core loops species internally); only LogT[p] varies. out[p] = the
+// {value,dDrho(==0),dDT} struct — dDrho stays 0 by design (base-density chain
+// rule is consumer-side, spec:104-113).
+inline void BremInterpolateSingleVariable2D2DAlignedSummedDifferentiate(
+    int npoints, Real const* LogD, Real const* Alpha, int nSpecies,
+    Real const* LogT, Real const* LogDs, Real const* LogTs, int iEp, int iE,
+    int moment, Real OS, TableView<5> const& view, BremPointDeriv* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nD = view.n[3],
+            nT = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = BremInterpolateSingleVariable2D2DAlignedSummedDifferentiatePoint(
+        LogD, Alpha, nSpecies, LogT[p], LogDs, nD, LogTs, nT, iEp, iE, nEp, nE,
+        moment, nMom, OS, table);
+  });
+}
+
 }  // namespace wli

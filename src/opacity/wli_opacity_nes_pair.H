@@ -265,6 +265,23 @@ inline void NESPairInterpolateSingleVariable2D2DAligned(
   });
 }
 
+// Array aligned NES/Pair evaluate-and-differentiate over
+// NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint. out[p] = the
+// {value,dDT,dDX} struct at the fixed (iEp,iE,kernel) slice.
+inline void NESPairInterpolateDifferentiateSingleVariable2D2DAligned(
+    int npoints, Real const* LogT, Real const* LogX, Real const* LogTs,
+    Real const* LogXs, int iEp, int iE, int kernel, Real OS,
+    TableView<5> const& view, NESPairPointDeriv* out) noexcept {
+  int const nEp = view.n[0], nE = view.n[1], nMom = view.n[2], nT = view.n[3],
+            nEta = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
+        LogT[p], LogX[p], LogTs, nT, LogXs, nEta, iEp, iE, nEp, nE, kernel, nMom,
+        OS, table);
+  });
+}
+
 // Array NES detailed-balance fill over NESDetailedBalanceFillPoint. E[] and T are
 // PHYSICAL (MeV), batch-shared; only LogT[p]/LogX[p] vary per point.
 inline void NESDetailedBalanceFill(
