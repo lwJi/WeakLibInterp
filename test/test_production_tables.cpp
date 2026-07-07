@@ -704,6 +704,80 @@ void run_brem(const std::string& path) {
           "Brem summed FD cross-check ∂value/∂T (1e-10)");
     check(ds.dDrho == Real(0), "Brem summed dDrho stays 0 by design");
   }
+
+  // Summed-kernel closure against the live table (spec:157-176, Verification
+  // #4-6). Single-effective-density inner kernel and the summed aligned
+  // evaluate, both at the fixed (iEp, iE, moment) energy/moment slice.
+  {
+    auto K = [&](int aEp, int aE, Real LogD, Real LogT) {
+      return wli::BremInterpolateSingleDensity2DAlignedPoint(
+          LogD, LogT, LogDs.data(), nD, LogTs.data(), nT, aEp, aE, nEp, nE,
+          moment, nMom, OS, tbl);
+    };
+    auto brem = [&](int aEp, int aE, const Real* LogD3, const Real* Alpha3,
+                    Real LogT) {
+      return wli::BremInterpolateSingleVariable2D2DAlignedSummedPoint(
+          LogD3, Alpha3, 3, LogT, LogDs.data(), nD, LogTs.data(), nT, aEp, aE,
+          nEp, nE, moment, nMom, OS, tbl);
+    };
+    // In-grid query at mid-table cell centers; fractions < 1 push all three
+    // effective densities below rho, safely into the interior of the grid.
+    Real rho = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real xp = 0.3, xn = 0.5;
+    Real LogT = std::log10(T);
+    Real LogD3[3] = {std::log10(rho * xp), std::log10(rho * xn),
+                     std::log10(rho * std::sqrt(std::fabs(xp * xn)))};
+    const Real Alpha_Brem[3] = {Real(1), Real(1), Real(28.0 / 3.0)};
+
+    // #4: effective-density decomposition closure on the real (non-affine)
+    // table. summed == 1*K1 + 1*K2 + (28/3)*K3, and the three K are distinct so
+    // the weight 28/3 is genuinely exercised.
+    Real K1 = K(iEp, iE, LogD3[0], LogT);
+    Real K2 = K(iEp, iE, LogD3[1], LogT);
+    Real K3 = K(iEp, iE, LogD3[2], LogT);
+    Real closed = K1 + K2 + Real(28.0 / 3.0) * K3;
+    check(wli::is_close(brem(iEp, iE, LogD3, Alpha_Brem, LogT), closed,
+                        wli::rtol_parity, wli::atol_default),
+          "Brem real decomposition: summed == 1*K1 + 1*K2 + (28/3)*K3");
+    check(!wli::is_close(K1, K2, wli::rtol_parity, wli::atol_default) &&
+              !wli::is_close(K2, K3, wli::rtol_parity, wli::atol_default) &&
+              !wli::is_close(K1, K3, wli::rtol_parity, wli::atol_default),
+          "Brem real decomposition: three effective-density terms distinct");
+
+    // #5: weight-order sensitivity. Permuting Alpha so 28/3 lands on the proton
+    // term (not the cross term) must change the result.
+    const Real Alpha_perm[3] = {Real(28.0 / 3.0), Real(1), Real(1)};
+    check(!wli::is_close(brem(iEp, iE, LogD3, Alpha_perm, LogT), closed,
+                         wli::rtol_parity, wli::atol_default),
+          "Brem real weight-order: permuted Alpha=[28/3,1,1] changes result");
+
+    // #6: both triangles computed (no symmetry fill). Two distinct in-range
+    // energy indices; each of the lower-triangle entry (a,b) and its transpose
+    // (b,a) is interpolated INDEPENDENTLY from its own corner stack and equals
+    // its OWN decomposition — no entry is derived from or filled by the other.
+    // NOTE: this production S_sigma is bit-for-bit transpose-symmetric in the
+    // two neutrino energies across the entire 5D array (verified empirically:
+    // Table(i,j,m,iD,iT) == Table(j,i,m,iD,iT) for all cells), so the two
+    // decompositions coincide numerically. The synthetic-table variant
+    // (test_brem_point.cpp:238-266) exercises the asymmetric case where the
+    // transposed outputs must DIFFER; here the real-table evidence for "both
+    // triangles computed" is that each transpose equals its independent
+    // decomposition rather than a copy/scale of the other.
+    int a = nEp / 3, b = 2 * nEp / 3;
+    Real closed_ab = K(a, b, LogD3[0], LogT) + K(a, b, LogD3[1], LogT) +
+                     Real(28.0 / 3.0) * K(a, b, LogD3[2], LogT);
+    Real closed_ba = K(b, a, LogD3[0], LogT) + K(b, a, LogD3[1], LogT) +
+                     Real(28.0 / 3.0) * K(b, a, LogD3[2], LogT);
+    Real summed_ab = brem(a, b, LogD3, Alpha_Brem, LogT);
+    Real summed_ba = brem(b, a, LogD3, Alpha_Brem, LogT);
+    check(wli::is_close(summed_ab, closed_ab, wli::rtol_parity,
+                        wli::atol_default),
+          "Brem real both-triangles: (a,b) equals its own decomposition");
+    check(wli::is_close(summed_ba, closed_ba, wli::rtol_parity,
+                        wli::atol_default),
+          "Brem real both-triangles: (b,a) equals its own decomposition");
+  }
 }
 
 // Probe + run one channel; returns true iff the table was present.
