@@ -128,6 +128,9 @@ Real TetraLinear(Real p0000, Real p1000, Real p0100, Real p1100, Real p0010,
 }
 
 // PentaLinear (oracle :487-517). 32 corners; dX1 least-significant.
+// Kept for oracle-parity completeness (top rung of the basis ladder above); no
+// current caller — every 5D channel fixes the non-thermodynamic axes and uses
+// the 2D2D-aligned BiLinear (NES/Pair, Brem) or TetraLinear (EmAb/Iso) leaf.
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 Real PentaLinear(Real p00000, Real p10000, Real p01000, Real p11000,
                  Real p00100, Real p10100, Real p01100, Real p11100,
