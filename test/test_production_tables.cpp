@@ -123,7 +123,7 @@ void run_eos(const std::string& path) {
                                                       Ys, nY, OS, tbl);
   Real want = wli::recover(
       tbl[static_cast<std::size_t>(iD) + nD * (iT + nT * iY)], OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "EOS node identity at an interior grid node");
 
   // Boundary: below the rho edge extrapolates (finite, not clamped, no error).
@@ -234,7 +234,7 @@ void run_emab(const std::string& path) {
       nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
   Real want = wli::recover(
       tbl[static_cast<std::size_t>(iE) + nE * (iD + nD * (iT + nT * iY))], OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "EmAb node identity at an interior grid node");
 
   // NaN propagation: a literal NaN Log argument (the opacity convention).
@@ -320,7 +320,7 @@ void run_iso(const std::string& path) {
   Real want = wli::recover(
       tbl[wli::flat_index<5>({iE, iMom, iD, iT, iY}, {nE, nMom, nD, nT, nY})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "Iso node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the E edge extrapolates to a finite value.
@@ -465,7 +465,7 @@ void run_nespair(const std::string& path, bool nes) {
       tbl[wli::flat_index<5>({iEp, iE, kernel, iT, iX},
                              {nEp, nE, nMom, nT, nEta})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         tag + " node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the T edge extrapolates to a finite value.
@@ -578,7 +578,7 @@ void run_brem(const std::string& path) {
       tbl[wli::flat_index<5>({iEp, iE, moment, iD, iT},
                              {nEp, nE, nMom, nD, nT})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "Brem node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the rho edge extrapolates to a finite value.
