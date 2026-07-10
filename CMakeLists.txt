@@ -115,6 +115,12 @@ else()
   # Installed-AMReX mode: consume a pre-built prefix (the ET AMReX thorn's
   # install). AMReX_* facts are read-only here — never FORCE them.
   # -------------------------------------------------------------------------
+  # An MPI-enabled install's AMReXConfig.cmake runs find_dependency(MPI) with
+  # the C component (the ET thorn's bundled build enables C), which hard-fails
+  # unless this project has the C language enabled too.
+  if(WLI_AMREX_MPI)
+    enable_language(C)
+  endif()
   find_package(AMReX REQUIRED CONFIG PATHS "${WLI_AMREX_INSTALL_DIR}")
 
   # Configuration-consistency guard (specs/cactus-integration.md §63): a

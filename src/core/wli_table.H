@@ -19,6 +19,7 @@
 // at compile time.
 
 #include <cstddef>
+#include <cstring>
 #include <type_traits>
 
 #include <AMReX_GpuContainers.H>  // Gpu::DeviceVector, GpuArray
@@ -96,12 +97,18 @@ class ResidentTable {
  public:
   // Fill once on the host and upload once (host -> device). `count` is the
   // element count (== meta.size()); the byte count is count*sizeof(double).
-  // Uses the real Gpu::htod_memcpy so the code is drop-in for a future GPU
-  // build (collapses to a blocking memcpy + no-op sync on a CPU build).
+  // GPU builds use the real Gpu::htod_memcpy; CPU builds use std::memcpy
+  // directly because AMReX < 26 declares htod_memcpy only under
+  // AMREX_USE_GPU (26.x added a host fallback that is exactly this memcpy),
+  // and the ET AMReX thorn's bundled dist is a 25.x.
   void upload(TableMeta<D> const& meta, double const* host, std::size_t count) {
     meta_ = meta;
     d_.resize(count);
+#if defined(AMREX_USE_GPU)
     amrex::Gpu::htod_memcpy(d_.data(), host, count * sizeof(double));
+#else
+    std::memcpy(d_.data(), host, count * sizeof(double));
+#endif
   }
 
   // By-value handle for kernel capture.
