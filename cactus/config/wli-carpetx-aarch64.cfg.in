@@ -1,0 +1,79 @@
+# Cactus option list for a minimal CarpetX + WeakLibInterp configuration on
+# aarch64 Linux (Ubuntu multiarch layout), no Fortran compiler required.
+#
+# Template: @WLI_AMREX_PREFIX@ is materialized by setup-cactus-tree.sh into
+# the concrete prefix where the ET AMReX thorn installs its bundled AMReX
+# (MPI+OMP on, double precision — the thorn's build.sh defaults plus
+# CCTK_OPENMP_MODE; pinned outside the config scratch so the LDFLAGS rpath
+# below is stable).
+# Derived from CarpetX's scripts/actions-cpu-real64.cfg with the x86-only
+# flags (-march=x86-64-v3, x86_64 multiarch paths, AVX2 NSIMD) removed and
+# Fortran disabled (F90 = none — this project never installs Fortran).
+
+VERSION = wli-carpetx-aarch64-2026-07-10
+
+CPP = cpp
+CC = gcc
+CXX = g++
+FPP = cpp
+F90 = none
+
+CFLAGS = -g -pipe -std=gnu11
+# -DSIMD_DISABLE: NSIMD is omitted (OPTIONAL for CarpetX); Arith's simd.hxx
+# needs the explicit scalar-fallback switch.
+# gnu++20: AMReX >= 26.x uses C++20 requires-clauses in its public headers.
+CXXFLAGS = -g -pipe -std=gnu++20 -DSIMD_DISABLE
+LDFLAGS = -Wl,-rpath,@WLI_AMREX_PREFIX@/lib
+
+C_LINE_DIRECTIVES = yes
+
+INTEGER_PRECISION = 4
+REAL_PRECISION = 8
+
+DEBUG = no
+OPTIMISE = yes
+C_OPTIMISE_FLAGS = -O2
+CXX_OPTIMISE_FLAGS = -O2
+WARN = yes
+CPP_WARN_FLAGS = -Wall
+
+OPENMP = yes
+CPP_OPENMP_FLAGS = -fopenmp
+C_OPENMP_FLAGS = -fopenmp
+CXX_OPENMP_FLAGS = -fopenmp
+LD_OPENMP_FLAGS = -fopenmp
+
+# The one AMReX every thorn links (specs/cactus-integration.md §62): the ET
+# AMReX thorn builds its bundled dist (25.11 — the version this CarpetX
+# checkout compiles against; sibling ../amrex is newer and breaks CarpetX's
+# interpolate.cxx) into the pinned prefix below; WeakLibInterp's build.sh
+# consumes the same AMREX_DIR for its find_package(AMReX) configure.
+AMREX_DIR = BUILD
+AMREX_INSTALL_DIR = @WLI_AMREX_PREFIX@
+
+# Serial system HDF5 with the C++ API (table-format-and-io.md reader needs
+# C+C++; no Fortran bindings without gfortran).
+HDF5_DIR = /usr/lib/aarch64-linux-gnu/hdf5/serial
+HDF5_ENABLE_CXX = yes
+HDF5_ENABLE_FORTRAN = no
+HDF5_INC_DIRS = /usr/lib/aarch64-linux-gnu/hdf5/serial/include
+HDF5_LIB_DIRS = /usr/lib/aarch64-linux-gnu/hdf5/serial/lib
+HDF5_LIBS = hdf5_hl_cpp hdf5_cpp hdf5_hl hdf5
+
+MPI_DIR = /usr
+
+# System yaml-cpp / zlib live in the multiarch libdir, which the
+# ExternalLibraries find_lib search does not cover — spell the dirs out.
+YAML_CPP_DIR = /usr
+YAML_CPP_INC_DIRS = /usr/include
+YAML_CPP_LIB_DIRS = /usr/lib/aarch64-linux-gnu
+YAML_CPP_LIBS = yaml-cpp
+
+ZLIB_DIR = /usr
+ZLIB_INC_DIRS = /usr/include
+ZLIB_LIB_DIRS = /usr/lib/aarch64-linux-gnu
+ZLIB_LIBS = z
+
+# Build WeakLibInterp from this repository checkout (the thorn's find-or-build
+# default, spelled out; point at an installed prefix for detect-only mode).
+WEAKLIBINTERP_DIR = BUILD

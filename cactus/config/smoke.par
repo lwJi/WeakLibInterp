@@ -1,0 +1,5 @@
+# Minimal run: WeakLibInterpTest_Smoke fires AT STARTUP; terminate immediately.
+ActiveThorns = "CarpetX IOUtil WeakLibInterpTest"
+Cactus::presync_mode = "mixed-error"
+Cactus::terminate = "iteration"
+Cactus::cctk_itlast = 0

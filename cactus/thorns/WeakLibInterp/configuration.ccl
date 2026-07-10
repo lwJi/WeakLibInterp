@@ -19,3 +19,9 @@ PROVIDES WeakLibInterp
   LANG bash
   OPTIONS WEAKLIBINTERP_DIR WEAKLIBINTERP_INSTALL_DIR
 }
+
+# Self-REQUIRES (the ExternalLibraries-AMReX trick): a capability's
+# MAKE_DEFINITIONs are routed only to thorns that REQUIRE it, and build.sh
+# needs WEAKLIBINTERP_BUILD / WEAKLIBINTERP_INSTALL_DIR during THIS thorn's
+# make phase — without this line the make.code.deps rule never sees them.
+REQUIRES WeakLibInterp

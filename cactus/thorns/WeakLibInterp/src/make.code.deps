@@ -1,16 +1,29 @@
 # make.code.deps — WeakLibInterp ExternalLibraries build stamp.
 #
-# Mirrors ExternalLibraries-AMReX (specs/cactus-integration.md §25): a single
-# done/WeakLibInterp stamp gated on the build script. This thorn carries NO
+# Mirrors ExternalLibraries-AMReX (specs/cactus-integration.md §25): the
+# thorn's build target depends on a done/WeakLibInterp stamp, gated on the
+# build script and skipped entirely in detect mode (detect.sh pre-creates the
+# stamp and leaves WEAKLIBINTERP_BUILD empty). This thorn carries NO
 # source-file dependency list of src/ — this repo's own CMake is the single
-# build description (spec:64), so adding a source or header under src/ requires
-# no edit here (the nested CMake picks it up on the next build).
+# build description (spec:64), so adding a source or header under src/
+# requires no edit here (the nested CMake picks it up on the next build).
+#
+# The exports hand build.sh the MAKE_DEFINITIONs it consumes: the resolved
+# install prefix from detect.sh, and the AMReX thorn's install location + GPU
+# options (spec:46, read-only). SCRATCH_BUILD is already exported by the flesh.
 
-WeakLibInterp_SRCDIR = $(PACKAGE_DIR)/WeakLibInterp/src
+export WEAKLIBINTERP_INSTALL_DIR
+export AMREX_DIR AMREX_ENABLE_CUDA AMREX_ENABLE_HIP
+export CMAKE_DIR
 
-# The stamp depends only on build.sh; running it drives the CMake build+install.
-$(SCRATCH_BUILD)/done/WeakLibInterp: $(WeakLibInterp_SRCDIR)/build.sh
+# Without this hook nothing depends on the stamp and build.sh never runs
+# (the ExternalLibraries-AMReX pattern; OBJS/SRCS are empty for this thorn).
+$(CCTK_TARGET) $(OBJS) $(SRCS:%=%.d): $(SCRATCH_BUILD)/done/$(THORN)
+
+ifneq ($(WEAKLIBINTERP_BUILD),)
+$(SCRATCH_BUILD)/done/$(THORN): $(SRCDIR)/build.sh
 	@echo "Building WeakLibInterp"
-	$(WeakLibInterp_SRCDIR)/build.sh
+	+$(SRCDIR)/build.sh
 	mkdir -p $(SCRATCH_BUILD)/done
 	date > $@
+endif

@@ -1,0 +1,22 @@
+# Minimal CarpetX + WeakLibInterp thorn list (specs/cactus-integration.md §79,
+# verification item 5): the CarpetX driver's required capability set
+# (AMReX IOUtil MPI yaml_cpp zlib + Arith/CarpetXRegrid/Loop), the
+# WeakLibInterp wrapper thorn, and the scratch consumer thorn that calls one
+# _Point per kernel family. ADIOS2 / openPMD / Silo / NSIMD are OPTIONAL for
+# CarpetX and deliberately omitted.
+
+CactusBase/IOUtil
+
+ExternalLibraries/AMReX
+ExternalLibraries/HDF5
+ExternalLibraries/MPI
+ExternalLibraries/yaml_cpp
+ExternalLibraries/zlib
+
+CarpetX/Arith
+CarpetX/CarpetX
+CarpetX/CarpetXRegrid
+CarpetX/Loop
+
+WeakLibInterp/WeakLibInterp
+WeakLibInterp/WeakLibInterpTest

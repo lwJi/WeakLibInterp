@@ -1,0 +1,10 @@
+# Schedule definitions for thorn WeakLibInterpTest
+#
+# One startup routine so the smoke object is referenced by the scheduler and
+# therefore pulled out of the thorn archive into the final link — a thorn
+# object nothing references would never exercise the wli_lib link at all.
+
+SCHEDULE WeakLibInterpTest_Smoke AT startup
+{
+  LANG: C
+} "Call one WeakLibInterp _Point per kernel family on tiny synthetic tables"

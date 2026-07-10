@@ -1,0 +1,11 @@
+# Configuration definition for thorn WeakLibInterpTest
+#
+# Scratch consumer thorn for the in-Cactus acceptance check
+# (specs/cactus-integration.md §79, verification item 5): its whole library
+# obligation is "REQUIRES WeakLibInterp" (spec:51) — include dirs, library dir,
+# and libwli_lib.a all arrive through the WeakLibInterp thorn's emissions.
+# AMReX and MPI are listed because the wli_*.H device headers include
+# <AMReX_*.H> (and, MPI-enabled, <mpi.h>), which the consumer compiles itself
+# (spec:67 — consumers compile the device headers with their own compiler).
+
+REQUIRES WeakLibInterp AMReX MPI
