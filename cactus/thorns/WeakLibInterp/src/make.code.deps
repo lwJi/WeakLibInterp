@@ -1,0 +1,16 @@
+# make.code.deps — WeakLibInterp ExternalLibraries build stamp.
+#
+# Mirrors ExternalLibraries-AMReX (specs/cactus-integration.md §25): a single
+# done/WeakLibInterp stamp gated on the build script. This thorn carries NO
+# source-file dependency list of src/ — this repo's own CMake is the single
+# build description (spec:64), so adding a source or header under src/ requires
+# no edit here (the nested CMake picks it up on the next build).
+
+WeakLibInterp_SRCDIR = $(PACKAGE_DIR)/WeakLibInterp/src
+
+# The stamp depends only on build.sh; running it drives the CMake build+install.
+$(SCRATCH_BUILD)/done/WeakLibInterp: $(WeakLibInterp_SRCDIR)/build.sh
+	@echo "Building WeakLibInterp"
+	$(WeakLibInterp_SRCDIR)/build.sh
+	mkdir -p $(SCRATCH_BUILD)/done
+	date > $@

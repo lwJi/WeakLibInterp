@@ -1,0 +1,21 @@
+# Configuration definition for thorn WeakLibInterp
+#
+# ExternalLibraries-style wrapper that delivers the WeakLibInterp EOS/opacity
+# interpolation library into a Cactus / CarpetX configuration. It mirrors the
+# ExternalLibraries-AMReX mechanism (specs/cactus-integration.md §25): a PROVIDES
+# block whose detect script decides find-vs-build from WEAKLIBINTERP_DIR and
+# emits the INCLUDE_DIRECTORY / LIBRARY_DIRECTORY / LIBRARY a consumer links, so
+# a consumer thorn's whole obligation is "REQUIRES WeakLibInterp" (spec:51).
+#
+# The library is built against the AMReX installation the ET AMReX thorn
+# provides (the same AMReX CarpetX links, spec:62), with HDF5 from the ET HDF5
+# thorn and MPI from the MPI thorn (spec:12,68).
+
+REQUIRES AMReX HDF5 MPI
+
+PROVIDES WeakLibInterp
+{
+  SCRIPT src/detect.sh
+  LANG bash
+  OPTIONS WEAKLIBINTERP_DIR WEAKLIBINTERP_INSTALL_DIR
+}

@@ -116,6 +116,108 @@ Real EmAbInterpolateSingleVariable4DPoint(
   return recover(f, OS);
 }
 
+// Value + the four ordered partial derivatives returned together, in the axis
+// order (E, rho, T, Ye) — the tetralinear corner-bit mapping dX1=E, dX2=rho,
+// dX3=T, dX4=Ye (mirrors EosPointDeriv in src/eos/wli_eos.H one dimension up).
+struct EmAbPointDeriv {
+  Real value;  // recovered physical value (bit-identical to the evaluate _Point)
+  Real dDE;    // ∂value/∂E   (Derivative(1))
+  Real dDrho;  // ∂value/∂rho (Derivative(2))
+  Real dDT;    // ∂value/∂T   (Derivative(3))
+  Real dDY;    // ∂value/∂Ye  (Derivative(4))
+};
+
+// Single-point evaluate-and-differentiate of one EmAb opacity at pre-LOG10'd
+// (LogE, LogD, LogT) and raw (Y = Ye). Same inputs/contract as
+// EmAbInterpolateSingleVariable4DPoint above; it shares the identical bracket/
+// delta + 16-corner gather + TetraLinear + recover sequence so .value is
+// bit-identical, then assembles the four partials from the raw TetraLinear
+// partials times the per-axis chain-rule scale factors (spec:83-92):
+//   ∂value/∂X_k = (value + OS) · a_k · (∂/∂d_k of the tetralinear-in-log form)
+//
+// CRITICAL scale-factor divergence from the 3D EOS template: E/rho/T arrive
+// PRE-LOG10'd (bracketed with the Lin form on the already-log10 coordinate), so
+// the three LOG axes use the pre-logged factor a = 1/(X·(LogXs[i+1]-LogXs[i]))
+// with X = 10**(LogX) — NOT the raw-coordinate 1/(X·log10(Xs[i+1]/Xs[i])) form
+// the EOS leaf uses on its un-logged rho/T. No ln10 survives on a log axis. The
+// LINEAR Ye axis uses aY = ln10/(Ys[iY+1]-Ys[iY]) (ln10 survives there only).
+// (value + OS) reconstitutes 10**(tetralinear); it is formed as value+OS (oracle
+// op order), not a second pow. No guards: a NaN from a non-positive E/rho/T
+// propagates through value->recon into all four derivatives; a non-positive Ye
+// (linear axis) extrapolates.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+EmAbPointDeriv EmAbInterpolateDifferentiateSingleVariable4DPoint(
+    Real LogE, Real LogD, Real LogT, Real Y,
+    Real const* LogEs, int nE, Real const* LogDs, int nD,
+    Real const* LogTs, int nT, Real const* Ys, int nY,
+    Real OS, Real const* table) noexcept {
+  auto [iE, dE] = GetIndexAndDeltaLin(LogE, LogEs, nE);
+  auto [iD, dD] = GetIndexAndDeltaLin(LogD, LogDs, nD);
+  auto [iT, dT] = GetIndexAndDeltaLin(LogT, LogTs, nT);
+  auto [iY, dY] = GetIndexAndDeltaLin(Y,    Ys,    nY);
+
+  // Gather the 16 corners (identical to the evaluate kernel; dX1=E least bit).
+  amrex::GpuArray<int, 4> const n{nE, nD, nT, nY};
+  Real const p0000 = table[flat_index<4>({iE,     iD,     iT,     iY    }, n)];
+  Real const p1000 = table[flat_index<4>({iE + 1, iD,     iT,     iY    }, n)];
+  Real const p0100 = table[flat_index<4>({iE,     iD + 1, iT,     iY    }, n)];
+  Real const p1100 = table[flat_index<4>({iE + 1, iD + 1, iT,     iY    }, n)];
+  Real const p0010 = table[flat_index<4>({iE,     iD,     iT + 1, iY    }, n)];
+  Real const p1010 = table[flat_index<4>({iE + 1, iD,     iT + 1, iY    }, n)];
+  Real const p0110 = table[flat_index<4>({iE,     iD + 1, iT + 1, iY    }, n)];
+  Real const p1110 = table[flat_index<4>({iE + 1, iD + 1, iT + 1, iY    }, n)];
+  Real const p0001 = table[flat_index<4>({iE,     iD,     iT,     iY + 1}, n)];
+  Real const p1001 = table[flat_index<4>({iE + 1, iD,     iT,     iY + 1}, n)];
+  Real const p0101 = table[flat_index<4>({iE,     iD + 1, iT,     iY + 1}, n)];
+  Real const p1101 = table[flat_index<4>({iE + 1, iD + 1, iT,     iY + 1}, n)];
+  Real const p0011 = table[flat_index<4>({iE,     iD,     iT + 1, iY + 1}, n)];
+  Real const p1011 = table[flat_index<4>({iE + 1, iD,     iT + 1, iY + 1}, n)];
+  Real const p0111 = table[flat_index<4>({iE,     iD + 1, iT + 1, iY + 1}, n)];
+  Real const p1111 = table[flat_index<4>({iE + 1, iD + 1, iT + 1, iY + 1}, n)];
+
+  // Tetralinear-in-log, universal recovery, and the reconstituted 10**(...).
+  Real const f =
+      TetraLinear(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                  p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                  dE, dD, dT, dY);
+  Real const value = recover(f, OS);
+  Real const recon = value + OS;  // == 10**f (oracle op order)
+
+  // Per-axis chain-rule scale factors. E/rho/T are PRE-LOG10'd, so the log-axis
+  // factor is the pre-logged form 1/(X·(LogXs[i+1]-LogXs[i])), X = 10**(LogX);
+  // no ln10. Ye is linear: aY = ln10/(Ys[iY+1]-Ys[iY]) (ln10 survives).
+  Real const aE = Real(1) / (std::pow(Real(10), LogE) * (LogEs[iE + 1] - LogEs[iE]));
+  Real const aD = Real(1) / (std::pow(Real(10), LogD) * (LogDs[iD + 1] - LogDs[iD]));
+  Real const aT = Real(1) / (std::pow(Real(10), LogT) * (LogTs[iT + 1] - LogTs[iT]));
+  Real const aY = ln10 / (Ys[iY + 1] - Ys[iY]);
+
+  // Raw TetraLinear partials take the OTHER three deltas (not the differentiated
+  // axis's own): dX1 uses (dD,dT,dY); dX2 uses (dE,dT,dY); dX3 uses (dE,dD,dY);
+  // dX4 uses (dE,dD,dT).
+  Real const dDE =
+      recon * aE *
+      dTetraLineardX1(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dD, dT, dY);
+  Real const dDrho =
+      recon * aD *
+      dTetraLineardX2(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dT, dY);
+  Real const dDT =
+      recon * aT *
+      dTetraLineardX3(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dD, dY);
+  Real const dDY =
+      recon * aY *
+      dTetraLineardX4(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dD, dT);
+
+  return EmAbPointDeriv{value, dDE, dDrho, dDT, dDY};
+}
+
 // Select the scalar Iso additive offset from the 2D Offsets[nOpacities,nMoments]
 // (Fortran OS_Iso(iC, iMoment), wlOpacityFieldsModule.f90:148,356). The array is
 // species-MAJOR / moment-MINOR, column-major, so the flat 0-based element is
@@ -187,6 +289,91 @@ Real IsoInterpolateSingleVariable5DPoint(
   return recover(f, OS);
 }
 
+// Value + the four ordered partials for the Iso channel, same shape and axis
+// order (E, rho, T, Ye) as EmAbPointDeriv.
+struct IsoPointDeriv {
+  Real value;  // recovered physical value (bit-identical to the evaluate _Point)
+  Real dDE;    // ∂value/∂E   (Derivative(1))
+  Real dDrho;  // ∂value/∂rho (Derivative(2))
+  Real dDT;    // ∂value/∂T   (Derivative(3))
+  Real dDY;    // ∂value/∂Ye  (Derivative(4))
+};
+
+// Single-point evaluate-and-differentiate of one Iso kernel moment at a FIXED
+// moment index iMom. Duplicates the IsoInterpolateSingleVariable5DPoint gather
+// (iMom held fixed in the flat_index<5> arithmetic) then assembles the four
+// partials exactly as EmAbInterpolateDifferentiateSingleVariable4DPoint does —
+// bit-identical .value to the value-Iso kernel on the sliced sub-table, and the
+// identical pre-logged log-axis / linear-Ye scale factors. Boundary / NaN
+// behavior is identical to the EmAb differentiate kernel above.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+IsoPointDeriv IsoInterpolateDifferentiateSingleVariable5DPoint(
+    Real LogE, Real LogD, Real LogT, Real Y,
+    Real const* LogEs, int nE, Real const* LogDs, int nD,
+    Real const* LogTs, int nT, Real const* Ys, int nY,
+    int iMom, int nMom,
+    Real OS, Real const* table) noexcept {
+  auto [iE, dE] = GetIndexAndDeltaLin(LogE, LogEs, nE);
+  auto [iD, dD] = GetIndexAndDeltaLin(LogD, LogDs, nD);
+  auto [iT, dT] = GetIndexAndDeltaLin(LogT, LogTs, nT);
+  auto [iY, dY] = GetIndexAndDeltaLin(Y,    Ys,    nY);
+
+  // Gather the 16 corners from the flat column-major 5D table with iMom FIXED
+  // (the strided slice); identical to IsoInterpolateSingleVariable5DPoint.
+  amrex::GpuArray<int, 5> const n{nE, nMom, nD, nT, nY};
+  Real const p0000 = table[flat_index<5>({iE,     iMom, iD,     iT,     iY    }, n)];
+  Real const p1000 = table[flat_index<5>({iE + 1, iMom, iD,     iT,     iY    }, n)];
+  Real const p0100 = table[flat_index<5>({iE,     iMom, iD + 1, iT,     iY    }, n)];
+  Real const p1100 = table[flat_index<5>({iE + 1, iMom, iD + 1, iT,     iY    }, n)];
+  Real const p0010 = table[flat_index<5>({iE,     iMom, iD,     iT + 1, iY    }, n)];
+  Real const p1010 = table[flat_index<5>({iE + 1, iMom, iD,     iT + 1, iY    }, n)];
+  Real const p0110 = table[flat_index<5>({iE,     iMom, iD + 1, iT + 1, iY    }, n)];
+  Real const p1110 = table[flat_index<5>({iE + 1, iMom, iD + 1, iT + 1, iY    }, n)];
+  Real const p0001 = table[flat_index<5>({iE,     iMom, iD,     iT,     iY + 1}, n)];
+  Real const p1001 = table[flat_index<5>({iE + 1, iMom, iD,     iT,     iY + 1}, n)];
+  Real const p0101 = table[flat_index<5>({iE,     iMom, iD + 1, iT,     iY + 1}, n)];
+  Real const p1101 = table[flat_index<5>({iE + 1, iMom, iD + 1, iT,     iY + 1}, n)];
+  Real const p0011 = table[flat_index<5>({iE,     iMom, iD,     iT + 1, iY + 1}, n)];
+  Real const p1011 = table[flat_index<5>({iE + 1, iMom, iD,     iT + 1, iY + 1}, n)];
+  Real const p0111 = table[flat_index<5>({iE,     iMom, iD + 1, iT + 1, iY + 1}, n)];
+  Real const p1111 = table[flat_index<5>({iE + 1, iMom, iD + 1, iT + 1, iY + 1}, n)];
+
+  Real const f =
+      TetraLinear(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                  p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                  dE, dD, dT, dY);
+  Real const value = recover(f, OS);
+  Real const recon = value + OS;  // == 10**f (oracle op order)
+
+  Real const aE = Real(1) / (std::pow(Real(10), LogE) * (LogEs[iE + 1] - LogEs[iE]));
+  Real const aD = Real(1) / (std::pow(Real(10), LogD) * (LogDs[iD + 1] - LogDs[iD]));
+  Real const aT = Real(1) / (std::pow(Real(10), LogT) * (LogTs[iT + 1] - LogTs[iT]));
+  Real const aY = ln10 / (Ys[iY + 1] - Ys[iY]);
+
+  Real const dDE =
+      recon * aE *
+      dTetraLineardX1(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dD, dT, dY);
+  Real const dDrho =
+      recon * aD *
+      dTetraLineardX2(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dT, dY);
+  Real const dDT =
+      recon * aT *
+      dTetraLineardX3(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dD, dY);
+  Real const dDY =
+      recon * aY *
+      dTetraLineardX4(p0000, p1000, p0100, p1100, p0010, p1010, p0110, p1110,
+                      p0001, p1001, p0101, p1101, p0011, p1011, p0111, p1111,
+                      dE, dD, dT);
+
+  return IsoPointDeriv{value, dDE, dDrho, dDT, dDY};
+}
+
 // ---------------------------------------------------------------------------
 // Host-level array (multi-point) launchers. Each owns ONE amrex::ParallelFor
 // over the matching _Point core; the flat table + extents are carried by a
@@ -211,6 +398,23 @@ inline void EmAbInterpolateSingleVariable4D(
   });
 }
 
+// Array EmAb evaluate-and-differentiate over
+// EmAbInterpolateDifferentiateSingleVariable4DPoint. out[p] = the
+// {value,dDE,dDrho,dDT,dDY} struct.
+inline void EmAbInterpolateDifferentiateSingleVariable4D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, Real OS, TableView<4> const& view,
+    EmAbPointDeriv* out) noexcept {
+  int const nE = view.n[0], nD = view.n[1], nT = view.n[2], nY = view.n[3];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = EmAbInterpolateDifferentiateSingleVariable4DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        OS, table);
+  });
+}
+
 // Array Iso evaluate over IsoInterpolateSingleVariable5DPoint at fixed iMom.
 inline void IsoInterpolateSingleVariable5D(
     int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
@@ -222,6 +426,24 @@ inline void IsoInterpolateSingleVariable5D(
   double const* table = view.data;
   amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
     out[p] = IsoInterpolateSingleVariable5DPoint(
+        LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
+        iMom, nMom, OS, table);
+  });
+}
+
+// Array Iso evaluate-and-differentiate over
+// IsoInterpolateDifferentiateSingleVariable5DPoint at fixed iMom. out[p] = the
+// {value,dDE,dDrho,dDT,dDY} struct.
+inline void IsoInterpolateDifferentiateSingleVariable5D(
+    int npoints, Real const* LogE, Real const* LogD, Real const* LogT,
+    Real const* Y, Real const* LogEs, Real const* LogDs, Real const* LogTs,
+    Real const* Ys, int iMom, Real OS, TableView<5> const& view,
+    IsoPointDeriv* out) noexcept {
+  int const nE = view.n[0], nMom = view.n[1], nD = view.n[2], nT = view.n[3],
+            nY = view.n[4];
+  double const* table = view.data;
+  amrex::ParallelFor(npoints, [=] AMREX_GPU_DEVICE (int p) noexcept {
+    out[p] = IsoInterpolateDifferentiateSingleVariable5DPoint(
         LogE[p], LogD[p], LogT[p], Y[p], LogEs, nE, LogDs, nD, LogTs, nT, Ys, nY,
         iMom, nMom, OS, table);
   });

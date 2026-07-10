@@ -26,8 +26,9 @@
 //   5. NaN propagation on non-positive T or eta (caller's log10(<0) -> NaN).
 //
 // Hand-rolled harness (no GoogleTest/Catch2), synthetic 5D table only (no HDF5),
-// no amrex::Initialize (pure host scalar math). Production-.h5 rtol=1e-12 parity
-// is DEFERRED to the regression-suite umbrella (no HDF5 reader exists yet).
+// no amrex::Initialize (pure host scalar math). Real-table rtol=1e-12 parity is
+// covered by run_nespair in test/test_production_tables.cpp (which loads the
+// production .h5 via the src/io/wli_io_opacity.{H,cpp} reader).
 
 #include <cmath>
 #include <cstdio>

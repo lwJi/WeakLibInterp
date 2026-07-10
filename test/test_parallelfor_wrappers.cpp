@@ -1,6 +1,6 @@
 // Host-level ParallelFor array-form wrapper acceptance probe.
 //
-// Exercises the 15 free wli:: array-form launchers that own one
+// Exercises the 20 free wli:: array-form launchers that own one
 // amrex::ParallelFor over the existing scalar _Point cores
 // (src/eos/wli_eos.H, wli_eos_inversion.H, src/opacity/wli_opacity_{emab_iso,
 // nes_pair,brem}.H; specs/amrex-device-interface.md:80-88,100-102). For every
@@ -321,6 +321,27 @@ void test_emab_iso() {
   }
   check(em_ok, "EmAbInterpolateSingleVariable4D array == serial _Point (bit-identical)");
 
+  // --- EmAb evaluate-and-differentiate (struct output) ---
+  amrex::Gpu::DeviceVector<wli::EmAbPointDeriv> emd_out(np);
+  wli::EmAbInterpolateDifferentiateSingleVariable4D(
+      np, dLogE.data(), dLogD.data(), dLogT.data(), dY.data(), dLogEs.data(),
+      dLogDs.data(), dLogTs.data(), dYs.data(), OS, view4, emd_out.data());
+  amrex::Gpu::streamSynchronize();
+  bool emd_ok = true;
+  for (int p = 0; p < np; ++p) {
+    wli::EmAbPointDeriv want =
+        wli::EmAbInterpolateDifferentiateSingleVariable4DPoint(
+            LogE[p], LogD[p], LogT[p], Y[p], LogEs.data(), nE, LogDs.data(), nD,
+            LogTs.data(), nT, Ys.data(), nY, OS, host4.data());
+    wli::EmAbPointDeriv got = emd_out.data()[p];
+    emd_ok &= (got.value == want.value) && (got.dDE == want.dDE) &&
+              (got.dDrho == want.dDrho) && (got.dDT == want.dDT) &&
+              (got.dDY == want.dDY);
+  }
+  check(emd_ok,
+        "EmAbInterpolateDifferentiateSingleVariable4D array == serial _Point "
+        "(all 5 fields bit-identical)");
+
   // --- Iso: 5D table (nE, nMom, nD, nT, nY), fixed iMom. ---
   const int nMom = 2;
   const int iMom = 1;
@@ -346,6 +367,28 @@ void test_emab_iso() {
     iso_ok &= (iso_out.data()[p] == want);
   }
   check(iso_ok, "IsoInterpolateSingleVariable5D array == serial _Point (bit-identical)");
+
+  // --- Iso evaluate-and-differentiate (struct output) ---
+  amrex::Gpu::DeviceVector<wli::IsoPointDeriv> isod_out(np);
+  wli::IsoInterpolateDifferentiateSingleVariable5D(
+      np, dLogE.data(), dLogD.data(), dLogT.data(), dY.data(), dLogEs.data(),
+      dLogDs.data(), dLogTs.data(), dYs.data(), iMom, OS, view5,
+      isod_out.data());
+  amrex::Gpu::streamSynchronize();
+  bool isod_ok = true;
+  for (int p = 0; p < np; ++p) {
+    wli::IsoPointDeriv want =
+        wli::IsoInterpolateDifferentiateSingleVariable5DPoint(
+            LogE[p], LogD[p], LogT[p], Y[p], LogEs.data(), nE, LogDs.data(), nD,
+            LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, host5.data());
+    wli::IsoPointDeriv got = isod_out.data()[p];
+    isod_ok &= (got.value == want.value) && (got.dDE == want.dDE) &&
+               (got.dDrho == want.dDrho) && (got.dDT == want.dDT) &&
+               (got.dDY == want.dDY);
+  }
+  check(isod_ok,
+        "IsoInterpolateDifferentiateSingleVariable5D array == serial _Point "
+        "(all 5 fields bit-identical)");
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +438,26 @@ void test_nes_pair() {
   check(al_ok,
         "NESPairInterpolateSingleVariable2D2DAligned array == serial _Point "
         "(bit-identical)");
+
+  // --- aligned evaluate-and-differentiate (struct output) ---
+  amrex::Gpu::DeviceVector<wli::NESPairPointDeriv> ald_out(np);
+  wli::NESPairInterpolateDifferentiateSingleVariable2D2DAligned(
+      np, dLogT.data(), dLogX.data(), dLogTs.data(), dLogXs.data(), iEp, iE,
+      kernel, OS, view, ald_out.data());
+  amrex::Gpu::streamSynchronize();
+  bool ald_ok = true;
+  for (int p = 0; p < np; ++p) {
+    wli::NESPairPointDeriv want =
+        wli::NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
+            LogT[p], LogX[p], LogTs.data(), nT, LogXs.data(), nEta, iEp, iE, nEp,
+            nE, kernel, nMom, OS, host.data());
+    wli::NESPairPointDeriv got = ald_out.data()[p];
+    ald_ok &= (got.value == want.value) && (got.dDT == want.dDT) &&
+              (got.dDX == want.dDX);
+  }
+  check(ald_ok,
+        "NESPairInterpolateDifferentiateSingleVariable2D2DAligned array == "
+        "serial _Point (all 3 fields bit-identical)");
 
   // --- NES detailed-balance fill (extra shared E[], T) ---
   amrex::Gpu::DeviceVector<double> nes_out(np);
@@ -471,6 +534,26 @@ void test_brem() {
         "BremInterpolateSingleDensity2DAligned array == serial _Point "
         "(bit-identical)");
 
+  // --- single-density evaluate-and-differentiate (struct output) ---
+  amrex::Gpu::DeviceVector<wli::BremPointDeriv> sdd_out(np);
+  wli::BremInterpolateSingleDensityDifferentiate2DAligned(
+      np, dLogD.data(), dLogT.data(), dLogDs.data(), dLogTs.data(), iEp, iE,
+      moment, OS, view, sdd_out.data());
+  amrex::Gpu::streamSynchronize();
+  bool sdd_ok = true;
+  for (int p = 0; p < np; ++p) {
+    wli::BremPointDeriv want =
+        wli::BremInterpolateSingleDensityDifferentiate2DAlignedPoint(
+            LogD[p], LogT[p], LogDs.data(), nD, LogTs.data(), nT, iEp, iE, nEp,
+            nE, moment, nMom, OS, host.data());
+    wli::BremPointDeriv got = sdd_out.data()[p];
+    sdd_ok &= (got.value == want.value) && (got.dDrho == want.dDrho) &&
+              (got.dDT == want.dDT);
+  }
+  check(sdd_ok,
+        "BremInterpolateSingleDensityDifferentiate2DAligned array == serial "
+        "_Point (all 3 fields bit-identical)");
+
   // --- summed: per-species LogD[nSpecies]/Alpha[nSpecies] shared, LogT varies ---
   const int nSpecies = 3;
   std::vector<double> LogDspec{7.5, 9.5, 10.0};        // shared effective dens
@@ -492,6 +575,26 @@ void test_brem() {
   check(sm_ok,
         "BremInterpolateSingleVariable2D2DAlignedSummed array == serial _Point "
         "(bit-identical)");
+
+  // --- summed evaluate-and-differentiate (struct output; dDrho stays 0) ---
+  amrex::Gpu::DeviceVector<wli::BremPointDeriv> smd_out(np);
+  wli::BremInterpolateSingleVariable2D2DAlignedSummedDifferentiate(
+      np, dLogDspec.data(), dAlpha.data(), nSpecies, dLogT.data(),
+      dLogDs.data(), dLogTs.data(), iEp, iE, moment, OS, view, smd_out.data());
+  amrex::Gpu::streamSynchronize();
+  bool smd_ok = true;
+  for (int p = 0; p < np; ++p) {
+    wli::BremPointDeriv want =
+        wli::BremInterpolateSingleVariable2D2DAlignedSummedDifferentiatePoint(
+            LogDspec.data(), Alpha.data(), nSpecies, LogT[p], LogDs.data(), nD,
+            LogTs.data(), nT, iEp, iE, nEp, nE, moment, nMom, OS, host.data());
+    wli::BremPointDeriv got = smd_out.data()[p];
+    smd_ok &= (got.value == want.value) && (got.dDrho == want.dDrho) &&
+              (got.dDT == want.dDT);
+  }
+  check(smd_ok,
+        "BremInterpolateSingleVariable2D2DAlignedSummedDifferentiate array == "
+        "serial _Point (all 3 fields bit-identical)");
 }
 
 }  // namespace
@@ -513,7 +616,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   std::printf(
-      "PASS parallelfor_wrappers: 15 array-form wrappers bit-identical to "
+      "PASS parallelfor_wrappers: 20 array-form wrappers bit-identical to "
       "serial _Point loops\n");
   return EXIT_SUCCESS;
 }

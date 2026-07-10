@@ -44,6 +44,19 @@ enum class AxisKind : int { NotInterp = 0, Linear = 1, Log = 2 };
 // Multi-moment opacity channels that need several offsets carry a separate
 // device-resident offsets array selected by a component axis, rather than
 // growing this fixed struct — only the axis geometry (n, kind) is pinned here.
+//
+// The `kind` and `OS` fields are caller-set bridge convention for the IO->device
+// path, not read back by any kernel. No src/ code bridges a HostEosTable into a
+// TableMeta today (only tests populate these slots); they are the convention slots
+// such a builder would fill — a HostEosTable->ResidentTable<3> builder would set
+// kind = {Log, Log, Linear} and OS = offset. But view() intentionally forwards
+// only n + data (the TableView<D> below): every kernel statically knows its own
+// axis kinds (EOS hardcodes Log/Log/Lin, opacity Lin) and receives OS as a
+// separate scalar, so wiring kind/OS through view() would only add runtime
+// dispatch no spec asks for (spec:112 names per-axis metadata packaging an
+// implementation freedom). The AxisKind enum itself is live elsewhere — HostAxis::kind
+// and HostOpacityGrid::kind in the IO layer (wli_io_eos.H:41, wli_io_opacity.H:44)
+// — so neither the enum nor these fields are orphaned stubs.
 template <int D>
 struct TableMeta {
   amrex::GpuArray<int, D> n;         // axis extents (n0, ..., n_{D-1})

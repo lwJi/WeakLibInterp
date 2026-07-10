@@ -103,8 +103,24 @@ inline std::uint64_t digest(const wli::io::HostEosTable& t) {
     hh.i(dv.hasExtents ? 1 : 0);
     hh.vd(dv.values);
   }
+  // Fold all 15 HostDVIndices in declaration order (== broadcast pack order,
+  // src/io/wli_io_eos.cpp idx[0]=iPressure … idx[14]=iGamma1): the digest must
+  // cover every loaded array's slot index so a divergence in any one is caught
+  // (spec table-format-and-io §183 Verification #5).
   hh.i(t.dvIndices.iPressure);
   hh.i(t.dvIndices.iEntropyPerBaryon);
+  hh.i(t.dvIndices.iInternalEnergyDensity);
+  hh.i(t.dvIndices.iElectronChemicalPotential);
+  hh.i(t.dvIndices.iProtonChemicalPotential);
+  hh.i(t.dvIndices.iNeutronChemicalPotential);
+  hh.i(t.dvIndices.iProtonMassFraction);
+  hh.i(t.dvIndices.iNeutronMassFraction);
+  hh.i(t.dvIndices.iAlphaMassFraction);
+  hh.i(t.dvIndices.iHeavyMassFraction);
+  hh.i(t.dvIndices.iHeavyMassNumber);
+  hh.i(t.dvIndices.iHeavyChargeNumber);
+  hh.i(t.dvIndices.iHeavyBindingEnergy);
+  hh.i(t.dvIndices.iThermalEnergy);
   hh.i(t.dvIndices.iGamma1);
   hh.vi(t.repaired);
   return hh.h;  // NOTE: dvByName intentionally NOT folded (locally rebuilt).

@@ -113,15 +113,18 @@ REGISTERED_SPECS=(
   "opacity-emab-iso.md"
   "opacity-nes-pair.md"
   "opacity-brem.md"
+  "opacity-differentiate.md"
   "regression-suite-design.md"
   "build-integration.md"
+  "cactus-integration.md"
 )
 
 # LEAF_SPECS : the per-channel leaf specs whose public device entry points the
 #              regression-suite coverage matrix must reference (the closure check below).
 #              The cross-cutting (fortran-parity-and-tolerances, amrex-device-interface) and
-#              technical (table-format-and-io, regression-suite-design, build-integration)
-#              specs are not themselves "leaf entry-point" specs and are excluded here.
+#              technical (table-format-and-io, regression-suite-design, build-integration,
+#              cactus-integration) specs are not themselves "leaf entry-point" specs and are
+#              excluded here.
 LEAF_SPECS=(
   "eos-interpolation.md"
   "eos-inversion.md"
@@ -182,6 +185,15 @@ SPEC_REQUIRE_IN_SPEC=(
   "build-integration.md|||AMReX_MPI=ON"
   "build-integration.md|||AMReX_ParallelDescriptor.H"
   "regression-suite-design.md|||rank-consistency"
+  "cactus-integration.md|||find_package(AMReX)"
+  "cactus-integration.md|||WEAKLIBINTERP_DIR"
+  "cactus-integration.md|||INCLUDE_DIRECTORY"
+  "cactus-integration.md|||ExternalLibraries"
+  "cactus-integration.md|||CarpetX"
+  "cactus-integration.md|||AMReX_GPU_BACKEND"
+  "cactus-integration.md|||one AMReX per executable"
+  "cactus-integration.md|||REQUIRES WeakLibInterp"
+  "cactus-integration.md|||1e-12"
 )
 
 # Inversion error-code set: every code must be documented in the inversion spec.
@@ -406,7 +418,8 @@ check_readme_links() {
 #       entry points — no channel/variant is silently uncovered;
 #   (2) the README links EXACTLY the set of spec .md files present on disk — no orphan
 #       spec file (on disk but unlinked) and no missing link (linked but registered specs
-#       all present is already checked above; here we also assert the count is exactly 10).
+#       all present is already checked above; here we also assert the on-disk count equals
+#       the registry size, so a new spec file must be registered to pass).
 # --------------------------------------------------------------------------------------
 
 # The public device entry-point routine names each leaf spec defines; the
@@ -458,8 +471,9 @@ check_coverage_matrix_closure() {
   done
 }
 
-# (2) README links EXACTLY the spec .md files on disk: exactly 10, no orphans, no missing.
-check_readme_exact_ten() {
+# (2) README links EXACTLY the spec .md files on disk: exactly the registered count, no
+#     orphans, no missing.
+check_readme_exact_registered() {
   if [ ! -f "$README" ]; then fail "README.md missing at specs/README.md"; return; fi
 
   # Spec .md files present on disk (README.md itself is the index, not a spec).
@@ -476,11 +490,12 @@ check_readme_exact_ten() {
     linked+=("$target")
   done < <(grep -oE '\]\(\.?/?[A-Za-z0-9_-]+\.md\)' "$README" | sed -E 's/^\]\(\.?\/?//; s/\)$//' | sort -u)
 
-  # exactly 10 spec files on disk.
-  if [ "${#on_disk[@]}" -eq 10 ]; then
-    pass "exactly 10 spec files present on disk (excluding README)"
+  # exactly as many spec files on disk as there are registered specs.
+  local want="${#REGISTERED_SPECS[@]}"
+  if [ "${#on_disk[@]}" -eq "$want" ]; then
+    pass "exactly $want spec files present on disk (excluding README)"
   else
-    fail "expected exactly 10 spec files on disk, found ${#on_disk[@]}: ${on_disk[*]}"
+    fail "expected exactly $want spec files on disk, found ${#on_disk[@]}: ${on_disk[*]}"
   fi
 
   # every on-disk spec is linked (no orphans).
@@ -498,7 +513,7 @@ check_readme_exact_ten() {
     [ "$hit" -eq 1 ] || fail "README links a spec not present on disk: $l"
   done
 
-  if [ "$FAILURES" -eq 0 ]; then pass "README links exactly the 10 on-disk spec files (no orphans, no missing)"; fi
+  if [ "$FAILURES" -eq 0 ]; then pass "README links exactly the $want on-disk spec files (no orphans, no missing)"; fi
 }
 
 # --------------------------------------------------------------------------------------
@@ -609,8 +624,8 @@ echo "--- closure: coverage matrix references every leaf entry point ---"
 check_coverage_matrix_closure
 
 echo
-echo "--- closure: README links exactly the 10 spec files ---"
-check_readme_exact_ten
+echo "--- closure: README links exactly the registered spec files ---"
+check_readme_exact_registered
 
 echo
 echo "--- committed snapshot checksums (CI-reproducible ground truth) ---"

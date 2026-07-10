@@ -72,6 +72,29 @@ std::string resolve(const std::string& root, const char* base) {
   return std::string();
 }
 
+// FD-conditioning window for the real-table derivative cross-checks. The
+// 4th-order central FD (relative step 1e-3 in the physical coordinate) of the
+// recovered value only resolves the analytic derivative to the relaxed 1e-10
+// tier where the stored log-table actually varies along the probed axis: with
+// per-axis slope g = |d(stored log10)/d(ln coordinate)|, evaluation rounding
+// eps*(value+offset) contributes ~1.2e-12/g relative noise and the h^4
+// truncation term grows as ~(g*ln10)^4*1e-12/30, so g in [0.1, 1.5] keeps both
+// comfortably under the tier. Outside the window the cross-check measures FD
+// error, not the kernel (the production Iso/NES mid-table cells recover values
+// many orders below their channel offsets — a nearly flat stored log — and the
+// mid-table Pair cell is an exact constant floor).
+constexpr Real kFdSlopeMin = 0.1, kFdSlopeMax = 1.5;
+
+// Mean stored-log increment along one axis over the 2^D corner pairs of a
+// cell; corner id bit k selects the high node of axis k. At the cell center of
+// the other axes the multilinear form is affine in this axis with exactly this
+// mean slope.
+Real mean_corner_delta(const Real* L, int D, int axis) {
+  Real s = 0;
+  for (int c = 0; c < (1 << D); ++c) s += ((c >> axis) & 1) ? L[c] : -L[c];
+  return s / Real(1 << (D - 1));
+}
+
 // -------- Per-channel cell runners (only invoked when the file is present). ---
 
 void run_eos(const std::string& path) {
@@ -100,7 +123,7 @@ void run_eos(const std::string& path) {
                                                       Ys, nY, OS, tbl);
   Real want = wli::recover(
       tbl[static_cast<std::size_t>(iD) + nD * (iT + nT * iY)], OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "EOS node identity at an interior grid node");
 
   // Boundary: below the rho edge extrapolates (finite, not clamped, no error).
@@ -113,6 +136,74 @@ void run_eos(const std::string& path) {
   check(std::isnan(wli::EosInterpolateSingleVariable3DPoint(
             Real(0.0), T, Y, Ds, nD, Ts, nT, Ys, nY, OS, tbl)),
         "EOS NaN propagation on non-positive rho");
+
+  // FD cross-check of the evaluate-and-differentiate kernel (spec Verification
+  // #3, §116) against a 4th-order central difference of the value-only leaf, on
+  // the real Pressure DV. EOS axes are RAW physical (rho/T on LOG axes, Ye on
+  // the LINEAR axis; the kernel logs rho/T internally), so evalP passes the raw
+  // (D,T,Y) directly and each physical coordinate is perturbed directly. Query
+  // at the center of the first interior cell inside the FD-conditioning slope
+  // window (see kFdSlopeMin/Max above) so the FD resolves the analytic partials
+  // to the relaxed 1e-10 tier.
+  {
+    const Real kLn10 = std::log(Real(10));
+    int cD = -1, cT = -1, cY = -1;
+    for (int di = 1; di < nD - 2 && cD < 0; ++di)
+      for (int ti = 1; ti < nT - 2 && cD < 0; ++ti)
+        for (int yi = 1; yi < nY - 2; ++yi) {
+          Real L[8];
+          for (int c = 0; c < 8; ++c)
+            L[c] = tbl[static_cast<std::size_t>(di + (c & 1)) +
+                       nD * ((ti + ((c >> 1) & 1)) +
+                             nT * (yi + ((c >> 2) & 1)))];
+          const Real Yc = Real(0.5) * (Ys[yi] + Ys[yi + 1]);
+          // LOG axes (rho/T): kLn10*log10(node ratio) = ln(node ratio).
+          const Real g[3] = {
+              std::abs(mean_corner_delta(L, 3, 0)) /
+                  (kLn10 * std::log10(Ds[di + 1] / Ds[di])),
+              std::abs(mean_corner_delta(L, 3, 1)) /
+                  (kLn10 * std::log10(Ts[ti + 1] / Ts[ti])),
+              std::abs(mean_corner_delta(L, 3, 2)) * Yc /
+                  (Ys[yi + 1] - Ys[yi])};
+          if (g[0] >= kFdSlopeMin && g[0] <= kFdSlopeMax &&
+              g[1] >= kFdSlopeMin && g[1] <= kFdSlopeMax &&
+              g[2] >= kFdSlopeMin && g[2] <= kFdSlopeMax) {
+            cD = di;
+            cT = ti;
+            cY = yi;
+            break;
+          }
+        }
+    check(cD >= 0, "EOS FD: a well-conditioned interior cell exists");
+    if (cD >= 0) {
+      auto evalP = [&](Real Dp, Real Tp, Real Yp) {
+        return wli::EosInterpolateSingleVariable3DPoint(
+            Dp, Tp, Yp, Ds, nD, Ts, nT, Ys, nY, OS, tbl);
+      };
+      auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+        return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+      };
+      Real Dc = std::sqrt(Ds[cD] * Ds[cD + 1]);
+      Real Tc = std::sqrt(Ts[cT] * Ts[cT + 1]);
+      Real Yc = Real(0.5) * (Ys[cY] + Ys[cY + 1]);
+      wli::EosPointDeriv d =
+          wli::EosInterpolateDifferentiateSingleVariable3DPoint(
+              Dc, Tc, Yc, Ds, nD, Ts, nT, Ys, nY, OS, tbl);
+      Real hD = 1.0e-3 * Dc, hT = 1.0e-3 * Tc, hY = 1.0e-3 * Yc;
+      Real fdD = fd(evalP(Dc - 2 * hD, Tc, Yc), evalP(Dc - hD, Tc, Yc),
+                    evalP(Dc + hD, Tc, Yc), evalP(Dc + 2 * hD, Tc, Yc), hD);
+      Real fdT = fd(evalP(Dc, Tc - 2 * hT, Yc), evalP(Dc, Tc - hT, Yc),
+                    evalP(Dc, Tc + hT, Yc), evalP(Dc, Tc + 2 * hT, Yc), hT);
+      Real fdY = fd(evalP(Dc, Tc, Yc - 2 * hY), evalP(Dc, Tc, Yc - hY),
+                    evalP(Dc, Tc, Yc + hY), evalP(Dc, Tc, Yc + 2 * hY), hY);
+      check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂rho (1e-10)");
+      check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂T (1e-10)");
+      check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+            "EOS FD cross-check ∂value/∂Ye (1e-10)");
+    }
+  }
 
   // ---- EOS inversion round-trip: DEY/DPY/DSY x NoGuess/Guess (6 cells) ------
   // For each dependent-variable family, forward-evaluate X at an interior
@@ -211,7 +302,7 @@ void run_emab(const std::string& path) {
       nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
   Real want = wli::recover(
       tbl[static_cast<std::size_t>(iE) + nE * (iD + nD * (iT + nT * iY))], OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "EmAb node identity at an interior grid node");
 
   // NaN propagation: a literal NaN Log argument (the opacity convention).
@@ -219,6 +310,48 @@ void run_emab(const std::string& path) {
             std::nan(""), LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
             LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
         "EmAb NaN propagation on a NaN LogE argument");
+
+  // FD cross-check of the evaluate-and-differentiate kernel against a 4th-order
+  // central difference of the value-only leaf. Axes are pre-log10'd, so perturb
+  // the PHYSICAL coordinate X*(1±h) and recompute LogX = log10(X) (∂value/∂X,
+  // not ∂value/∂LogX). E/rho/T are LOG axes; Ye is the one LINEAR axis (perturbed
+  // directly). Query at an interior cell CENTER to stay comfortably inside one
+  // bracket cell, away from the node kinks of the piecewise-multilinear interp.
+  {
+    auto evalP = [&](Real E, Real D, Real T, Real Y) {
+      return wli::EmAbInterpolateSingleVariable4DPoint(
+          std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real E = std::pow(Real(10), Real(0.5) * (LogEs[iE] + LogEs[iE + 1]));
+    Real D = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real Y = Real(0.5) * (Ys[iY] + Ys[iY + 1]);
+    wli::EmAbPointDeriv d =
+        wli::EmAbInterpolateDifferentiateSingleVariable4DPoint(
+            std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl);
+    Real hE = 1.0e-3 * E, hD = 1.0e-3 * D, hT = 1.0e-3 * T, hY = 1.0e-3 * Y;
+    Real fdE = fd(evalP(E - 2 * hE, D, T, Y), evalP(E - hE, D, T, Y),
+                  evalP(E + hE, D, T, Y), evalP(E + 2 * hE, D, T, Y), hE);
+    Real fdD = fd(evalP(E, D - 2 * hD, T, Y), evalP(E, D - hD, T, Y),
+                  evalP(E, D + hD, T, Y), evalP(E, D + 2 * hD, T, Y), hD);
+    Real fdT = fd(evalP(E, D, T - 2 * hT, Y), evalP(E, D, T - hT, Y),
+                  evalP(E, D, T + hT, Y), evalP(E, D, T + 2 * hT, Y), hT);
+    Real fdY = fd(evalP(E, D, T, Y - 2 * hY), evalP(E, D, T, Y - hY),
+                  evalP(E, D, T, Y + hY), evalP(E, D, T, Y + 2 * hY), hY);
+    check(wli::is_close(d.dDE, fdE, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂E (1e-10)");
+    check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂rho (1e-10)");
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂T (1e-10)");
+    check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+          "EmAb FD cross-check ∂value/∂Ye (1e-10)");
+  }
 }
 
 void run_iso(const std::string& path) {
@@ -255,7 +388,7 @@ void run_iso(const std::string& path) {
   Real want = wli::recover(
       tbl[wli::flat_index<5>({iE, iMom, iD, iT, iY}, {nE, nMom, nD, nT, nY})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "Iso node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the E edge extrapolates to a finite value.
@@ -271,6 +404,90 @@ void run_iso(const std::string& path) {
             LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
             tbl)),
         "Iso NaN propagation on a NaN LogE argument");
+
+  // FD cross-check: perturb the PHYSICAL coordinate and recompute LogX (axes are
+  // pre-log10'd). E/rho/T are LOG axes; Ye is the one LINEAR axis. Query at the
+  // center of the first interior cell inside the FD-conditioning slope window
+  // (see kFdSlopeMin/Max above) — the mid-table Iso cell recovers a value ~7
+  // orders below the channel offset, where the FD loses that many digits to
+  // cancellation.
+  {
+    const Real kLn10 = std::log(Real(10));
+    int cM = -1, cE = -1, cD = -1, cT = -1, cY = -1;
+    for (int m = 0; m < nMom && cM < 0; ++m)
+      for (int e = 1; e < nE - 2 && cM < 0; ++e)
+        for (int di = 1; di < nD - 2 && cM < 0; ++di)
+          for (int ti = 1; ti < nT - 2 && cM < 0; ++ti)
+            for (int yi = 1; yi < nY - 2; ++yi) {
+              Real L[16];
+              for (int c = 0; c < 16; ++c)
+                L[c] = tbl[wli::flat_index<5>(
+                    {e + (c & 1), m, di + ((c >> 1) & 1), ti + ((c >> 2) & 1),
+                     yi + ((c >> 3) & 1)},
+                    {nE, nMom, nD, nT, nY})];
+              const Real Yc = Real(0.5) * (Ys[yi] + Ys[yi + 1]);
+              const Real g[4] = {
+                  std::abs(mean_corner_delta(L, 4, 0)) /
+                      (kLn10 * (LogEs[e + 1] - LogEs[e])),
+                  std::abs(mean_corner_delta(L, 4, 1)) /
+                      (kLn10 * (LogDs[di + 1] - LogDs[di])),
+                  std::abs(mean_corner_delta(L, 4, 2)) /
+                      (kLn10 * (LogTs[ti + 1] - LogTs[ti])),
+                  std::abs(mean_corner_delta(L, 4, 3)) * Yc /
+                      (Ys[yi + 1] - Ys[yi])};
+              if (g[0] >= kFdSlopeMin && g[0] <= kFdSlopeMax &&
+                  g[1] >= kFdSlopeMin && g[1] <= kFdSlopeMax &&
+                  g[2] >= kFdSlopeMin && g[2] <= kFdSlopeMax &&
+                  g[3] >= kFdSlopeMin && g[3] <= kFdSlopeMax) {
+                cM = m;
+                cE = e;
+                cD = di;
+                cT = ti;
+                cY = yi;
+                break;
+              }
+            }
+    check(cM >= 0, "Iso FD: a well-conditioned interior cell exists");
+    if (cM >= 0) {
+      const Real OSfd = wli::IsoOffset(t.offset.data(), t.nOpacities,
+                                       t.nMoments, iSpecies, cM);
+      auto evalP = [&](Real E, Real D, Real T, Real Y) {
+        return wli::IsoInterpolateSingleVariable5DPoint(
+            std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, cM, nMom, OSfd,
+            tbl);
+      };
+      auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+        return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+      };
+      Real E = std::pow(Real(10), Real(0.5) * (LogEs[cE] + LogEs[cE + 1]));
+      Real D = std::pow(Real(10), Real(0.5) * (LogDs[cD] + LogDs[cD + 1]));
+      Real T = std::pow(Real(10), Real(0.5) * (LogTs[cT] + LogTs[cT + 1]));
+      Real Y = Real(0.5) * (Ys[cY] + Ys[cY + 1]);
+      wli::IsoPointDeriv d =
+          wli::IsoInterpolateDifferentiateSingleVariable5DPoint(
+              std::log10(E), std::log10(D), std::log10(T), Y, LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, cM, nMom,
+              OSfd, tbl);
+      Real hE = 1.0e-3 * E, hD = 1.0e-3 * D, hT = 1.0e-3 * T, hY = 1.0e-3 * Y;
+      Real fdE = fd(evalP(E - 2 * hE, D, T, Y), evalP(E - hE, D, T, Y),
+                    evalP(E + hE, D, T, Y), evalP(E + 2 * hE, D, T, Y), hE);
+      Real fdD = fd(evalP(E, D - 2 * hD, T, Y), evalP(E, D - hD, T, Y),
+                    evalP(E, D + hD, T, Y), evalP(E, D + 2 * hD, T, Y), hD);
+      Real fdT = fd(evalP(E, D, T - 2 * hT, Y), evalP(E, D, T - hT, Y),
+                    evalP(E, D, T + hT, Y), evalP(E, D, T + 2 * hT, Y), hT);
+      Real fdY = fd(evalP(E, D, T, Y - 2 * hY), evalP(E, D, T, Y - hY),
+                    evalP(E, D, T, Y + hY), evalP(E, D, T, Y + 2 * hY), hY);
+      check(wli::is_close(d.dDE, fdE, wli::rtol_relaxed, wli::atol_default),
+            "Iso FD cross-check ∂value/∂E (1e-10)");
+      check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+            "Iso FD cross-check ∂value/∂rho (1e-10)");
+      check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+            "Iso FD cross-check ∂value/∂T (1e-10)");
+      check(wli::is_close(d.dDY, fdY, wli::rtol_relaxed, wli::atol_default),
+            "Iso FD cross-check ∂value/∂Ye (1e-10)");
+    }
+  }
 }
 
 void run_nespair(const std::string& path, bool nes) {
@@ -316,7 +533,7 @@ void run_nespair(const std::string& path, bool nes) {
       tbl[wli::flat_index<5>({iEp, iE, kernel, iT, iX},
                              {nEp, nE, nMom, nT, nEta})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         tag + " node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the T edge extrapolates to a finite value.
@@ -331,6 +548,70 @@ void run_nespair(const std::string& path, bool nes) {
             std::nan(""), LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, iEp,
             iE, nEp, nE, kernel, nMom, OS, tbl)),
         tag + " NaN propagation on a NaN LogT argument");
+
+  // FD cross-check: BOTH (T, eta) are LOG axes — perturb the PHYSICAL coordinate
+  // and recompute the log (T in MeV, eta the physical degeneracy). Query at the
+  // center of the first interior (T, eta) cell inside the FD-conditioning slope
+  // window (see kFdSlopeMin/Max above), scanning the discrete (kernel, E', E)
+  // indices too — the mid-table NES cell recovers a value ~11 orders below the
+  // channel offset (FD cancellation) and the mid-table Pair cell is an exact
+  // constant floor (a vacuous 0 == 0 comparison).
+  {
+    const Real kLn10 = std::log(Real(10));
+    int cK = -1, cEp = -1, cE = -1, cT = -1, cX = -1;
+    for (int k = 0; k < nMom && cK < 0; ++k)
+      for (int ep = 0; ep < nEp && cK < 0; ++ep)
+        for (int e = 0; e < nE && cK < 0; ++e)
+          for (int ti = 1; ti < nT - 2 && cK < 0; ++ti)
+            for (int xi = 1; xi < nEta - 2; ++xi) {
+              Real L[4];
+              for (int c = 0; c < 4; ++c)
+                L[c] = tbl[wli::flat_index<5>(
+                    {ep, e, k, ti + (c & 1), xi + ((c >> 1) & 1)},
+                    {nEp, nE, nMom, nT, nEta})];
+              const Real gT = std::abs(mean_corner_delta(L, 2, 0)) /
+                              (kLn10 * (LogTs[ti + 1] - LogTs[ti]));
+              const Real gX = std::abs(mean_corner_delta(L, 2, 1)) /
+                              (kLn10 * (LogXs[xi + 1] - LogXs[xi]));
+              if (gT >= kFdSlopeMin && gT <= kFdSlopeMax &&
+                  gX >= kFdSlopeMin && gX <= kFdSlopeMax) {
+                cK = k;
+                cEp = ep;
+                cE = e;
+                cT = ti;
+                cX = xi;
+                break;
+              }
+            }
+    check(cK >= 0, tag + " FD: a well-conditioned interior cell exists");
+    if (cK >= 0) {
+      const Real OSfd = wli::IsoOffset(t.offset.data(), t.nOpacities,
+                                       t.nMoments, iSpecies, cK);
+      auto evalP = [&](Real T, Real X) {
+        return wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+            std::log10(T), std::log10(X), LogTs.data(), nT, LogXs.data(), nEta,
+            cEp, cE, nEp, nE, cK, nMom, OSfd, tbl);
+      };
+      auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+        return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+      };
+      Real T = std::pow(Real(10), Real(0.5) * (LogTs[cT] + LogTs[cT + 1]));
+      Real X = std::pow(Real(10), Real(0.5) * (LogXs[cX] + LogXs[cX + 1]));
+      wli::NESPairPointDeriv d =
+          wli::NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
+              std::log10(T), std::log10(X), LogTs.data(), nT, LogXs.data(),
+              nEta, cEp, cE, nEp, nE, cK, nMom, OSfd, tbl);
+      Real hT = 1.0e-3 * T, hX = 1.0e-3 * X;
+      Real fdT = fd(evalP(T - 2 * hT, X), evalP(T - hT, X), evalP(T + hT, X),
+                    evalP(T + 2 * hT, X), hT);
+      Real fdX = fd(evalP(T, X - 2 * hX), evalP(T, X - hX), evalP(T, X + hX),
+                    evalP(T, X + 2 * hX), hX);
+      check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+            tag + " FD cross-check ∂value/∂T (1e-10)");
+      check(wli::is_close(d.dDX, fdX, wli::rtol_relaxed, wli::atol_default),
+            tag + " FD cross-check ∂value/∂eta (1e-10)");
+    }
+  }
 }
 
 void run_brem(const std::string& path) {
@@ -365,7 +646,7 @@ void run_brem(const std::string& path) {
       tbl[wli::flat_index<5>({iEp, iE, moment, iD, iT},
                              {nEp, nE, nMom, nD, nT})],
       OS);
-  check(wli::is_close(got, want, wli::rtol_relaxed),
+  check(wli::is_close(got, want, wli::rtol_machine),
         "Brem node identity at an interior grid node");
 
   // Boundary: a quarter-cell below the rho edge extrapolates to a finite value.
@@ -380,6 +661,123 @@ void run_brem(const std::string& path) {
             std::nan(""), LogTs[iT], LogDs.data(), nD, LogTs.data(), nT, iEp, iE,
             nEp, nE, moment, nMom, OS, tbl)),
         "Brem NaN propagation on a NaN LogD argument");
+
+  // FD cross-check of the single-effective-density differentiate kernel. BOTH
+  // (rho, T) are LOG axes (rho BEFORE T — the Brem transpose); perturb the
+  // PHYSICAL coordinate and recompute the log. Query at an interior cell center,
+  // away from node kinks.
+  {
+    auto evalP = [&](Real D, Real T) {
+      return wli::BremInterpolateSingleDensity2DAlignedPoint(
+          std::log10(D), std::log10(T), LogDs.data(), nD, LogTs.data(), nT, iEp,
+          iE, nEp, nE, moment, nMom, OS, tbl);
+    };
+    auto fd = [](Real vm2, Real vm1, Real vp1, Real vp2, Real h) {
+      return (-vp2 + 8.0 * vp1 - 8.0 * vm1 + vm2) / (12.0 * h);
+    };
+    Real D = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    wli::BremPointDeriv d =
+        wli::BremInterpolateSingleDensityDifferentiate2DAlignedPoint(
+            std::log10(D), std::log10(T), LogDs.data(), nD, LogTs.data(), nT,
+            iEp, iE, nEp, nE, moment, nMom, OS, tbl);
+    Real hD = 1.0e-3 * D, hT = 1.0e-3 * T;
+    Real fdD = fd(evalP(D - 2 * hD, T), evalP(D - hD, T), evalP(D + hD, T),
+                  evalP(D + 2 * hD, T), hD);
+    Real fdT = fd(evalP(D, T - 2 * hT), evalP(D, T - hT), evalP(D, T + hT),
+                  evalP(D, T + 2 * hT), hT);
+    check(wli::is_close(d.dDrho, fdD, wli::rtol_relaxed, wli::atol_default),
+          "Brem FD cross-check ∂value/∂rho (1e-10)");
+    check(wli::is_close(d.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "Brem FD cross-check ∂value/∂T (1e-10)");
+
+    // Summed differentiate kernel: value/dDT are populated (linearity), dDrho is
+    // 0 by design (base-density chain rule is consumer-side, spec:104-113). Use a
+    // single effective density so the sum reduces to Alpha*single-density.
+    Real LogDspec[1] = {std::log10(D)};
+    Real Alpha[1] = {Real(1)};
+    wli::BremPointDeriv ds =
+        wli::BremInterpolateSingleVariable2D2DAlignedSummedDifferentiatePoint(
+            LogDspec, Alpha, 1, std::log10(T), LogDs.data(), nD, LogTs.data(),
+            nT, iEp, iE, nEp, nE, moment, nMom, OS, tbl);
+    check(wli::is_close(ds.dDT, fdT, wli::rtol_relaxed, wli::atol_default),
+          "Brem summed FD cross-check ∂value/∂T (1e-10)");
+    check(ds.dDrho == Real(0), "Brem summed dDrho stays 0 by design");
+  }
+
+  // Summed-kernel closure against the live table (spec:157-176, Verification
+  // #4-6). Single-effective-density inner kernel and the summed aligned
+  // evaluate, both at the fixed (iEp, iE, moment) energy/moment slice.
+  {
+    auto K = [&](int aEp, int aE, Real LogD, Real LogT) {
+      return wli::BremInterpolateSingleDensity2DAlignedPoint(
+          LogD, LogT, LogDs.data(), nD, LogTs.data(), nT, aEp, aE, nEp, nE,
+          moment, nMom, OS, tbl);
+    };
+    auto brem = [&](int aEp, int aE, const Real* LogD3, const Real* Alpha3,
+                    Real LogT) {
+      return wli::BremInterpolateSingleVariable2D2DAlignedSummedPoint(
+          LogD3, Alpha3, 3, LogT, LogDs.data(), nD, LogTs.data(), nT, aEp, aE,
+          nEp, nE, moment, nMom, OS, tbl);
+    };
+    // In-grid query at mid-table cell centers; fractions < 1 push all three
+    // effective densities below rho, safely into the interior of the grid.
+    Real rho = std::pow(Real(10), Real(0.5) * (LogDs[iD] + LogDs[iD + 1]));
+    Real T = std::pow(Real(10), Real(0.5) * (LogTs[iT] + LogTs[iT + 1]));
+    Real xp = 0.3, xn = 0.5;
+    Real LogT = std::log10(T);
+    Real LogD3[3] = {std::log10(rho * xp), std::log10(rho * xn),
+                     std::log10(rho * std::sqrt(std::fabs(xp * xn)))};
+    const Real Alpha_Brem[3] = {Real(1), Real(1), Real(28.0 / 3.0)};
+
+    // #4: effective-density decomposition closure on the real (non-affine)
+    // table. summed == 1*K1 + 1*K2 + (28/3)*K3, and the three K are distinct so
+    // the weight 28/3 is genuinely exercised.
+    Real K1 = K(iEp, iE, LogD3[0], LogT);
+    Real K2 = K(iEp, iE, LogD3[1], LogT);
+    Real K3 = K(iEp, iE, LogD3[2], LogT);
+    Real closed = K1 + K2 + Real(28.0 / 3.0) * K3;
+    check(wli::is_close(brem(iEp, iE, LogD3, Alpha_Brem, LogT), closed,
+                        wli::rtol_parity, wli::atol_default),
+          "Brem real decomposition: summed == 1*K1 + 1*K2 + (28/3)*K3");
+    check(!wli::is_close(K1, K2, wli::rtol_parity, wli::atol_default) &&
+              !wli::is_close(K2, K3, wli::rtol_parity, wli::atol_default) &&
+              !wli::is_close(K1, K3, wli::rtol_parity, wli::atol_default),
+          "Brem real decomposition: three effective-density terms distinct");
+
+    // #5: weight-order sensitivity. Permuting Alpha so 28/3 lands on the proton
+    // term (not the cross term) must change the result.
+    const Real Alpha_perm[3] = {Real(28.0 / 3.0), Real(1), Real(1)};
+    check(!wli::is_close(brem(iEp, iE, LogD3, Alpha_perm, LogT), closed,
+                         wli::rtol_parity, wli::atol_default),
+          "Brem real weight-order: permuted Alpha=[28/3,1,1] changes result");
+
+    // #6: both triangles computed (no symmetry fill). Two distinct in-range
+    // energy indices; each of the lower-triangle entry (a,b) and its transpose
+    // (b,a) is interpolated INDEPENDENTLY from its own corner stack and equals
+    // its OWN decomposition — no entry is derived from or filled by the other.
+    // NOTE: this production S_sigma is bit-for-bit transpose-symmetric in the
+    // two neutrino energies across the entire 5D array (verified empirically:
+    // Table(i,j,m,iD,iT) == Table(j,i,m,iD,iT) for all cells), so the two
+    // decompositions coincide numerically. The synthetic-table variant
+    // (test_brem_point.cpp:238-266) exercises the asymmetric case where the
+    // transposed outputs must DIFFER; here the real-table evidence for "both
+    // triangles computed" is that each transpose equals its independent
+    // decomposition rather than a copy/scale of the other.
+    int a = nEp / 3, b = 2 * nEp / 3;
+    Real closed_ab = K(a, b, LogD3[0], LogT) + K(a, b, LogD3[1], LogT) +
+                     Real(28.0 / 3.0) * K(a, b, LogD3[2], LogT);
+    Real closed_ba = K(b, a, LogD3[0], LogT) + K(b, a, LogD3[1], LogT) +
+                     Real(28.0 / 3.0) * K(b, a, LogD3[2], LogT);
+    Real summed_ab = brem(a, b, LogD3, Alpha_Brem, LogT);
+    Real summed_ba = brem(b, a, LogD3, Alpha_Brem, LogT);
+    check(wli::is_close(summed_ab, closed_ab, wli::rtol_parity,
+                        wli::atol_default),
+          "Brem real both-triangles: (a,b) equals its own decomposition");
+    check(wli::is_close(summed_ba, closed_ba, wli::rtol_parity,
+                        wli::atol_default),
+          "Brem real both-triangles: (b,a) equals its own decomposition");
+  }
 }
 
 // Probe + run one channel; returns true iff the table was present.

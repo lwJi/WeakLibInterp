@@ -37,9 +37,9 @@
 //   8. NaN propagation (NaN-equality): non-positive effective rho or T -> NaN.
 //
 // Hand-rolled harness (no GoogleTest/Catch2), synthetic 5D table only (no HDF5),
-// no amrex::Initialize (pure host scalar math). Production-.h5 rtol=1e-12 parity
-// (vs wl-Op-SFHo-15-25-50-E40-Brem.h5) is DEFERRED to the regression-suite
-// umbrella (no HDF5 reader exists yet).
+// no amrex::Initialize (pure host scalar math). Real-table rtol=1e-12 parity
+// (vs wl-Op-SFHo-15-25-50-E40-Brem.h5) is covered by run_brem in
+// test/test_production_tables.cpp.
 
 #include <cmath>
 #include <cstdio>

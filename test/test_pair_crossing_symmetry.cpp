@@ -27,8 +27,8 @@
 //      use this fill.
 //
 // Hand-rolled harness (no GoogleTest/Catch2), synthetic 5D table only (no HDF5),
-// no amrex::Initialize (pure host scalar math). Production-.h5 parity is DEFERRED
-// (no HDF5 reader exists yet).
+// no amrex::Initialize (pure host scalar math). Real-table parity is covered by
+// run_nespair (the Pair pass) in test/test_production_tables.cpp.
 
 #include <cmath>
 #include <cstdio>

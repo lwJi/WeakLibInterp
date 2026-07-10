@@ -98,6 +98,24 @@ target_link_libraries(test_iso_point PRIVATE wli_lib)
 
 add_test(NAME iso_point COMMAND test_iso_point)
 
+# EmAb single-point 4D evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_emab_iso.H, specs/opacity-differentiate.md).
+# Header-only, synthetic table, so links only wli_lib; no HDF5 needed.
+add_executable(test_emab_diff_point test_emab_diff_point.cpp)
+
+target_link_libraries(test_emab_diff_point PRIVATE wli_lib)
+
+add_test(NAME emab_diff_point COMMAND test_emab_diff_point)
+
+# Iso single-point 5D-slice-to-4D evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_emab_iso.H, specs/opacity-differentiate.md).
+# Header-only, synthetic 5D table, so links only wli_lib; no HDF5 needed.
+add_executable(test_iso_diff_point test_iso_diff_point.cpp)
+
+target_link_libraries(test_iso_diff_point PRIVATE wli_lib)
+
+add_test(NAME iso_diff_point COMMAND test_iso_diff_point)
+
 # NES/Pair aligned 2D2D bilinear single-point evaluate kernel
 # (src/opacity/wli_opacity_nes_pair.H, specs/opacity-nes-pair.md). Header-only, synthetic 5D
 # table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
@@ -106,6 +124,15 @@ add_executable(test_nes_pair_point test_nes_pair_point.cpp)
 target_link_libraries(test_nes_pair_point PRIVATE wli_lib)
 
 add_test(NAME nes_pair_point COMMAND test_nes_pair_point)
+
+# NES/Pair aligned 2D2D bilinear single-point evaluate-and-differentiate kernel
+# (src/opacity/wli_opacity_nes_pair.H, specs/opacity-differentiate.md). Header-only,
+# synthetic 5D table, so links only wli_lib (AMReX CPU/double); no HDF5 needed.
+add_executable(test_nes_pair_diff_point test_nes_pair_diff_point.cpp)
+
+target_link_libraries(test_nes_pair_diff_point PRIVATE wli_lib)
+
+add_test(NAME nes_pair_diff_point COMMAND test_nes_pair_diff_point)
 
 # NES detailed-balance symmetry fill of the upper energy triangle
 # (src/opacity/wli_opacity_nes_pair.H, specs/opacity-nes-pair.md:148-156). Header-only,
@@ -133,6 +160,15 @@ add_executable(test_brem_point test_brem_point.cpp)
 target_link_libraries(test_brem_point PRIVATE wli_lib)
 
 add_test(NAME brem_point COMMAND test_brem_point)
+
+# Brem aligned 2D2D bilinear single-point evaluate-and-differentiate kernels
+# (src/opacity/wli_opacity_brem.H, specs/opacity-differentiate.md:65-72,104-113).
+# Header-only, synthetic 5D table, so links only wli_lib; no HDF5 needed.
+add_executable(test_brem_diff_point test_brem_diff_point.cpp)
+
+target_link_libraries(test_brem_diff_point PRIVATE wli_lib)
+
+add_test(NAME brem_diff_point COMMAND test_brem_diff_point)
 
 # Host-level ParallelFor array-form wrappers over the 15 _Point kernels
 # (src/eos/wli_eos.H, wli_eos_inversion.H, src/opacity/wli_opacity_{emab_iso,
@@ -229,6 +265,54 @@ endif()
 add_test(NAME production_tables COMMAND test_production_tables)
 
 set_tests_properties(production_tables PROPERTIES SKIP_RETURN_CODE 77)
+
+# Always-on serial test of the /EmAb_CorrectedAbsorption legacy-group fallback
+# in read_emab_table (spec: table-format-and-io.md:182). Writes a synthetic
+# fixture lacking /EmAb, calls the live reader, and asserts usedLegacyGroup and
+# read-back parity. Links the C++ (and C) HDF5 bindings like the readers do.
+add_executable(test_emab_legacy_fallback test_emab_legacy_fallback.cpp)
+
+target_link_libraries(test_emab_legacy_fallback PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_emab_legacy_fallback PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_emab_legacy_fallback PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_emab_legacy_fallback PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_emab_legacy_fallback PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+add_test(NAME emab_legacy_fallback COMMAND test_emab_legacy_fallback)
+
+# Standalone WL_TABLES_ROOT-guarded round-trip layout test
+# (spec: table-format-and-io.md:180, Verification #2). Addresses one interior
+# element of a 3D EOS DV sub-table via the column-major flat-offset formula
+# (Path A: read_eos_table + wli::flat_index) and via an INDEPENDENT raw HDF5
+# hyperslab at the reversed C-order index (Path B), asserting exact ==. SKIPs
+# (exit 77) when WL_TABLES_ROOT is unset / the EOS table is absent, so the
+# default build/ suite stays green. Links the C++ (and C) HDF5 bindings like the
+# other live-reader tests, since it both calls the reader and opens the file raw.
+add_executable(test_layout_roundtrip test_layout_roundtrip.cpp)
+
+target_link_libraries(test_layout_roundtrip PRIVATE wli_lib)
+
+if(TARGET hdf5::hdf5_cpp)
+  target_link_libraries(test_layout_roundtrip PRIVATE hdf5::hdf5_cpp)
+else()
+  target_link_libraries(test_layout_roundtrip PRIVATE ${HDF5_CXX_LIBRARIES})
+  target_include_directories(test_layout_roundtrip PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
+
+if(WLI_HDF5_C_LIB)
+  target_link_libraries(test_layout_roundtrip PRIVATE ${WLI_HDF5_C_LIB})
+endif()
+
+add_test(NAME layout_roundtrip COMMAND test_layout_roundtrip)
+
+set_tests_properties(layout_roundtrip PROPERTIES SKIP_RETURN_CODE 77)
 
 # MPI root-read + broadcast tests (specs/table-format-and-io.md:183-184). One
 # executable, two modes: "open" (non-root ranks never open the .h5; loads are
@@ -356,16 +440,21 @@ if(WLI_AMREX_MPI)
   wli_add_mpi_ranks(eos_inversion_describe test_eos_inversion_describe)
   wli_add_mpi_ranks(emab_point             test_emab_point)
   wli_add_mpi_ranks(iso_point              test_iso_point)
+  wli_add_mpi_ranks(emab_diff_point        test_emab_diff_point)
+  wli_add_mpi_ranks(iso_diff_point         test_iso_diff_point)
   wli_add_mpi_ranks(nes_pair_point         test_nes_pair_point)
+  wli_add_mpi_ranks(nes_pair_diff_point    test_nes_pair_diff_point)
   wli_add_mpi_ranks(nes_detailed_balance   test_nes_detailed_balance)
   wli_add_mpi_ranks(pair_crossing_symmetry test_pair_crossing_symmetry)
   wli_add_mpi_ranks(brem_point             test_brem_point)
+  wli_add_mpi_ranks(brem_diff_point        test_brem_diff_point)
   wli_add_mpi_ranks(parallelfor_wrappers   test_parallelfor_wrappers)
   wli_add_mpi_ranks(eos_reader_schema      test_eos_reader_schema)
   wli_add_mpi_ranks(opacity_reader_schema  test_opacity_reader_schema)
   wli_add_mpi_ranks(coverage_matrix        test_coverage_matrix)
   wli_add_mpi_ranks(perturbation_meta      test_perturbation_meta)
   wli_add_mpi_ranks(production_tables      test_production_tables)
+  wli_add_mpi_ranks(layout_roundtrip       test_layout_roundtrip)
 
   # The root-read/broadcast tests already run at 2 ranks (mpi_root_open*, above);
   # add their 4-rank vehicle so the whole suite genuinely runs at both counts.

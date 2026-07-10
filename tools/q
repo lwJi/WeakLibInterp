@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# tools/q — quiet runner. Stash a command's stdout+stderr; print one ✓ line on
+# success, dump the full stashed log only on failure. The child's exit code
+# passes through unchanged (ctest SKIP_RETURN_CODE, CI gating, && chains all
+# keep working). Contract: specs/build-integration.md "Quiet-runner workflow".
+#
+# Usage: tools/q <command> [args...]
+# Log:   .build/logs/<basename-of-command>.log — overwritten per run, kept
+#        after success so the last run stays greppable (e.g. warnings).
+
+set -u
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: tools/q <command> [args...]" >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+log_dir="$repo_root/.build/logs"
+mkdir -p "$log_dir"
+name="$(basename "$1")"
+case "$name" in
+  bash|sh) [ "$#" -ge 2 ] && name="$(basename "$2")" ;;
+esac
+log="$log_dir/$name.log"
+
+start=$SECONDS
+"$@" >"$log" 2>&1
+code=$?
+elapsed=$((SECONDS - start))
+
+if [ "$elapsed" -ge 60 ]; then
+  dur="$((elapsed / 60))m$((elapsed % 60))s"
+else
+  dur="${elapsed}s"
+fi
+
+if [ "$code" -eq 0 ]; then
+  echo "✓ $* ($dur)"
+else
+  echo "✗ $* (exit $code, $dur)"
+  echo "--- stashed output ($log) ---"
+  cat "$log"
+  echo "--- end stashed output ---"
+fi
+exit "$code"

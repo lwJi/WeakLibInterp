@@ -260,3 +260,168 @@ jobs:
 
       - name: Build (no ctest — no GPU on the runner)
         run: cmake --build WeakLibInterp/build --parallel 4
+
+  # Cactus/ET consumption rehearsal (specs/cactus-integration.md Verification
+  # #1-#3): consume AMReX as a pre-built INSTALL prefix instead of the sibling
+  # source tree. Builds a CPU-only/double AMReX install, then exercises the
+  # three installed-AMReX contracts in separate build trees (never colliding
+  # with build-test's build/): (#1) full library+suite build & unfiltered ctest
+  # in installed mode; (#2) the config-consistency guard hard-errors when a
+  # CUDA backend is requested against the NONE install; (#3) a tests-off WLI
+  # install links from a bare -I/-L prefix (no CMake package-config, spec:51)
+  # via a scratch translation unit. Verification #4 (default build/ unchanged)
+  # is already covered by build-test, so it is intentionally not repeated here.
+  build-test-installed-amrex:
+    name: Installed-AMReX rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Install HDF5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libhdf5-dev
+
+      # Distinct ccache key: the CPU-only/double install build here is a third
+      # AMReX configuration, separate from amrex-<ref> and amrex-mpi-<ref>.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: amrex-installed-${{ env.AMREX_REF }}
+          max-size: 1G
+
+      # Step A (Verification #1 prep): build+install a CPU-only, double, no-MPI
+      # AMReX into amrex-prefix. No GPU/MPI here so the guard in Step C trips on
+      # a backend MISMATCH, not on a missing CUDA compiler.
+      - name: Build + install AMReX (CPU-only, double)
+        run: >
+          cmake -S amrex -B amrex-build
+          -DCMAKE_BUILD_TYPE=Release
+          -DAMReX_MPI=OFF
+          -DAMReX_LINEAR_SOLVERS=OFF
+          -DAMReX_AMRLEVEL=OFF
+          -DAMReX_PARTICLES=OFF
+          -DAMReX_TINY_PROFILE=OFF
+          -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/amrex-prefix"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          && cmake --build amrex-build --parallel 4 --target install
+
+      # Step B (Verification #1): configure/build the full library + suite in
+      # installed-AMReX mode and run unfiltered ctest. Tolerance tiers are
+      # enforced inside the test binaries; production-table cells SKIP (77) with
+      # WL_TABLES_ROOT unset, exactly as in build-test.
+      - name: Configure (installed-AMReX mode)
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build-installed
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build (installed-AMReX mode)
+        run: cmake --build WeakLibInterp/build-installed --parallel 4
+
+      - name: Run regression suite (installed-AMReX mode)
+        run: ctest --test-dir WeakLibInterp/build-installed --output-on-failure
+
+      # Step C (Verification #2): the config-consistency guard must hard-error
+      # at configure when the requested WLI_GPU_BACKEND (CUDA) disagrees with
+      # the NONE backend recorded by the install — naming both values. Invert
+      # the exit status: a SUCCESSFUL configure is the failure here.
+      - name: Config-consistency guard trips on backend mismatch
+        run: |
+          if cmake -S WeakLibInterp -B WeakLibInterp/build-guard \
+               -DCMAKE_BUILD_TYPE=Release \
+               -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix" \
+               -DWLI_GPU_BACKEND=CUDA >guard.log 2>&1; then
+            echo "ERROR: expected configure to FAIL on backend mismatch but it succeeded"
+            cat guard.log
+            exit 1
+          fi
+          echo "configure failed as expected; checking for the guard diagnostic"
+          grep -q "AMReX GPU-backend mismatch" guard.log
+
+      # Step D (Verification #3): install WLI tests-off (library-only) into
+      # wli-prefix — libwli_lib.a + a flat include/ of the public wli_*.H — then
+      # compile & link a scratch TU against that bare prefix (no CMake
+      # package-config is installed, spec:51). The scratch TU includes one
+      # header per family and odr-uses the library anchor to force linking.
+      - name: Install WeakLibInterp (tests-off, installed-AMReX mode)
+        run: >
+          cmake -S WeakLibInterp -B WeakLibInterp/build-notests
+          -DCMAKE_BUILD_TYPE=Release
+          -DWLI_BUILD_TESTS=OFF
+          -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix"
+          -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/wli-prefix"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          && cmake --build WeakLibInterp/build-notests --parallel 4 --target install
+
+      - name: Scratch-TU compile+link against installed prefix
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/scratch"
+          cd "${GITHUB_WORKSPACE}/scratch"
+          cat > scratch.cpp <<'CPP'
+          // Consumer-side smoke test: the flat installed headers must compile
+          // against the AMReX prefix, and libwli_lib.a must link from a bare
+          // -I/-L prefix with no CMake package-config. Header entry points are
+          // AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE, so odr-using their address
+          // behind a never-taken branch forces the compile without table data;
+          // wli::wli_value_type_size() is the only .cpp-defined symbol and is
+          // what actually forces the archive to link.
+          #include "wli_eos.H"
+          #include "wli_eos_inversion.H"
+          #include "wli_opacity.H"
+          namespace wli { int wli_value_type_size(); }
+          int main(int argc, char**) {
+            if (argc < 0) {
+              (void)&wli::EosInterpolateSingleVariable3DPoint;
+              (void)&wli::ComputeTemperatureWith_DEY_NoGuess;
+              (void)&wli::EmAbInterpolateSingleVariable4DPoint;
+              (void)&wli::IsoInterpolateSingleVariable5DPoint;
+              (void)&wli::NESPairInterpolateSingleVariable2D2DAlignedPoint;
+              (void)&wli::BremInterpolateSingleDensity2DAlignedPoint;
+            }
+            return wli::wli_value_type_size() == 8 ? 0 : 1;
+          }
+          CPP
+          cat > CMakeLists.txt <<'CML'
+          cmake_minimum_required(VERSION 3.20)
+          project(wli_scratch CXX)
+          find_package(AMReX REQUIRED CONFIG)
+          find_package(HDF5 REQUIRED COMPONENTS C CXX)
+          add_executable(scratch scratch.cpp)
+          target_include_directories(scratch PRIVATE
+            $ENV{GITHUB_WORKSPACE}/wli-prefix/include ${HDF5_INCLUDE_DIRS})
+          target_link_libraries(scratch PRIVATE
+            $ENV{GITHUB_WORKSPACE}/wli-prefix/lib/libwli_lib.a AMReX::amrex)
+          if(TARGET hdf5::hdf5_cpp)
+            target_link_libraries(scratch PRIVATE hdf5::hdf5_cpp)
+          else()
+            target_link_libraries(scratch PRIVATE ${HDF5_CXX_LIBRARIES})
+          endif()
+          if(TARGET hdf5::hdf5)
+            target_link_libraries(scratch PRIVATE hdf5::hdf5)
+          else()
+            target_link_libraries(scratch PRIVATE ${HDF5_C_LIBRARIES})
+          endif()
+          CML
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/amrex-prefix" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel 4
+          ./build/scratch
