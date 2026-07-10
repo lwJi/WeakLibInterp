@@ -6,7 +6,9 @@
 #
 # What it does (idempotent; every step skipped if already present):
 #   1. Clones the Cactus flesh + CactusBase + the five ExternalLibraries
-#      wrapper thorns into <cactus-dir> (default <repo>/.build/cactus).
+#      wrapper thorns into <cactus-dir> (default <repos>/wli-cactus/cactus,
+#      a sibling of the repo: the Ralph loop wipes .build/ between
+#      iterations, and this multi-GB tree must survive that).
 #   2. Symlinks arrangements/CarpetX -> the sibling ../CarpetX checkout and
 #      arrangements/WeakLibInterp -> this repo's cactus/thorns (GetComponents
 #      style; the thorn's build.sh resolves symlinks with pwd -P).
@@ -34,8 +36,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
 REPOS_ROOT="$(cd "${REPO_ROOT}/.." && pwd -P)"
 
-CACTUS_DIR="${1:-${REPO_ROOT}/.build/cactus}"
-AMREX_PREFIX="${WLI_AMREX_PREFIX:-${REPO_ROOT}/.build/opt/amrex-cactus}"
+CACTUS_DIR="${1:-${REPOS_ROOT}/wli-cactus/cactus}"
+AMREX_PREFIX="${WLI_AMREX_PREFIX:-${REPOS_ROOT}/wli-cactus/opt/amrex-cactus}"
 CARPETX_SRC="${WLI_CARPETX_ROOT:-${REPOS_ROOT}/CarpetX}"
 JOBS="${WLI_BUILD_JOBS:-4}"
 
