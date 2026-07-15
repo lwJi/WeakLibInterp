@@ -36,7 +36,7 @@ tools/test.sh
 
 Every build flag lives in `CMakePresets.json`; the scripts route output
 through `tools/q`, the quiet-runner wrapper (one line on success, full log
-dump on failure, logs under `.build/logs/`). See the `CLAUDE.md` "Build & run"
+dump on failure, logs under `.scratch/logs/`). See the `CLAUDE.md` "Build & run"
 section for details.
 
 ## Variants & CI

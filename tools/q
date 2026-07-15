@@ -5,8 +5,10 @@
 # keep working). Contract: specs/build-integration.md "Quiet-runner workflow".
 #
 # Usage: tools/q <command> [args...]
-# Log:   .build/logs/<basename-of-command>.log — overwritten per run, kept
+# Log:   .scratch/logs/<basename-of-command>.log — overwritten per run, kept
 #        after success so the last run stays greppable (e.g. warnings).
+#        Never .build/ — that is the Ralph loop's per-iteration state and is
+#        wiped at every iteration start.
 
 set -u
 
@@ -16,7 +18,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-log_dir="$repo_root/.build/logs"
+log_dir="$repo_root/.scratch/logs"
 mkdir -p "$log_dir"
 name="$(basename "$1")"
 case "$name" in

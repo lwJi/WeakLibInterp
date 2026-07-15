@@ -20,8 +20,8 @@
 # both ends of the contract agree on what "provisioned" means. The dest and
 # the scratch build tree are wiped before building — never build over
 # remnants. Source tree: ${AMREX_SRC:-<repo>/../amrex}. Scratch build trees
-# live beside the store, under <store>/.scratch/ (never in the repo — .build/
-# is reserved for the quiet-runner's logs). Compiler/toolchain comes from the
+# live beside the store, under <store>/.scratch/ (never in the repo — the
+# repo's own scratch dir is .scratch/). Compiler/toolchain comes from the
 # environment (CXX/CC), as with any CMake build.
 
 set -euo pipefail
