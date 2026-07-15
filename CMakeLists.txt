@@ -103,6 +103,20 @@ endif()
 # unconditionally (cheap: compiler detection only; nothing compiles as C).
 enable_language(C)
 
+# A HIP prefix's AMReXTargets.cmake names hip::device, hip::hiprand,
+# roc::rocrand and roc::rocprim in its PUBLIC link interface, but unlike the
+# CUDA arm (find_dependency(CUDAToolkit)) AMReXConfig.cmake resolves none of
+# them — the consumer must define those imported targets before the include,
+# or find_package(AMReX) dies with "hip::device ... not found". Resolve them
+# here, gated on the requested backend so NONE/CUDA hosts never need ROCm;
+# CMAKE_PREFIX_PATH=/opt/rocm (or a hip toolchain) makes these findable.
+if(WLI_GPU_BACKEND STREQUAL "HIP")
+  find_package(hip CONFIG REQUIRED)
+  find_package(rocrand CONFIG REQUIRED)
+  find_package(rocprim CONFIG REQUIRED)
+  find_package(hiprand CONFIG REQUIRED)
+endif()
+
 # AMReX_* facts are read-only here — never FORCE them.
 find_package(AMReX REQUIRED CONFIG PATHS "${WLI_AMREX_INSTALL_DIR}")
 
