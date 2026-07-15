@@ -21,26 +21,29 @@ for every module. Consult it before implementing or changing behavior.
 
 ## Build & test
 
-Prerequisites: `cmake`, `g++`, `libhdf5-dev`. AMReX resolves from a sibling
-checkout by default (override with `-DWLI_AMREX_ROOT=<path>`).
+Prerequisites: `cmake`, `g++`, `libhdf5-dev`, and OpenMPI for the MPI-ON
+default build. AMReX is consumed as an installed prefix; provision one from a
+sibling `../amrex` checkout first.
 
 ```sh
-# Configure
-tools/q cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-# Build
-tools/q cmake --build build -j4
-# Test
-tools/q ctest --test-dir build --output-on-failure
+# Provision an AMReX prefix (once; installs to ~/wli-amrex/mpi)
+tools/provision-amrex.sh mpi
+# Build (default preset)
+tools/build.sh
+# Test (full suite, incl. the 1/2/4-rank MPI tiers)
+tools/test.sh
 ```
 
-`tools/q` is the quiet-runner wrapper: it stashes output under `.build/logs/`
-and prints one line on success, dumping the full log on failure. See the
-`CLAUDE.md` "Build & run" section for details.
+Every build flag lives in `CMakePresets.json`; the scripts route output
+through `tools/q`, the quiet-runner wrapper (one line on success, full log
+dump on failure, logs under `.build/logs/`). See the `CLAUDE.md` "Build & run"
+section for details.
 
 ## Variants & CI
 
-`docs/BUILD.md` covers the variant build trees (single-precision, MPI,
-CUDA/HIP compile-only, installed-AMReX) and the CI job map.
+`docs/BUILD.md` covers the preset vocabulary (serial, single-precision,
+CUDA/HIP compile-only, library-only), the AMReX prefix store, and the CI job
+map.
 
 ## Cactus thorn
 
