@@ -44,14 +44,11 @@ elif [ "${AMREX_ENABLE_HIP:-no}" = "yes" ]; then
 fi
 
 ################################################################################
-# Forward MPI to WLI_AMREX_MPI when the AMReX thorn advertises it; otherwise
-# leave the default OFF. The nested CMake guard reconciles this against the
-# install's recorded AMReX_MPI, so a wrong guess fails loudly at configure.
+# MPI is NOT forwarded: WLI's CMake defaults its MPI knob to AUTO and derives
+# the value from the AMReX_MPI fact find_package reads out of the prefix —
+# this script neither guesses nor parses anything. The nested configure
+# prints the derived value ("derived MPI=... from the AMReX prefix").
 ################################################################################
-WLI_AMREX_MPI=OFF
-if [ "${AMREX_ENABLE_MPI:-no}" = "yes" ]; then
-    WLI_AMREX_MPI=ON
-fi
 
 WLI_BUILD_JOBS="${WLI_BUILD_JOBS:-4}"
 
@@ -59,7 +56,7 @@ echo "BEGIN MESSAGE"
 echo "Configuring WeakLibInterp: root=${WLI_REPO_ROOT}"
 echo "  AMReX install : ${AMREX_DIR}"
 echo "  GPU backend   : ${WLI_GPU_BACKEND}"
-echo "  MPI           : ${WLI_AMREX_MPI}"
+echo "  MPI           : derived from the AMReX prefix (see nested configure)"
 echo "  install prefix: ${WLI_PREFIX}"
 echo "END MESSAGE"
 
@@ -71,7 +68,6 @@ cmake -S "${WLI_REPO_ROOT}" -B "${WLI_BUILD_DIR}" \
     -DWLI_AMREX_INSTALL_DIR="${AMREX_DIR}" \
     -DWLI_BUILD_TESTS=OFF \
     -DWLI_GPU_BACKEND="${WLI_GPU_BACKEND}" \
-    -DWLI_AMREX_MPI="${WLI_AMREX_MPI}" \
     -DCMAKE_INSTALL_PREFIX="${WLI_PREFIX}"
 
 cmake --build "${WLI_BUILD_DIR}" -j"${WLI_BUILD_JOBS}" --target install

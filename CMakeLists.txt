@@ -44,14 +44,18 @@ endif()
 set(WLI_CUDA_ARCH "8.0"    CACHE STRING "AMReX_CUDA_ARCH for WLI_GPU_BACKEND=CUDA")
 set(WLI_AMD_ARCH  "gfx90a" CACHE STRING "AMReX_AMD_ARCH for WLI_GPU_BACKEND=HIP")
 
-# MPI. ON (default) is the gating configuration: an AMReX_MPI=ON prefix
-# (CPU-only / double unchanged), the suite running under the MPI launcher with
-# the 1/2/4-rank tiers as the standing default suite — matching every real
-# consumer (the ET AMReX prefix records MPI ON). OFF is the serial variant in
-# its own tree; its bare-name 1-rank runs are the 1-rank ≡ serial cross-check
-# (specs/build-integration.md §61).
-set(WLI_AMREX_MPI ON CACHE BOOL
-    "Consume an AMReX_MPI=ON prefix and run the suite under the MPI launcher")
+# MPI. AUTO (default) derives the value from what the AMReX prefix itself
+# recorded (AMReX_MPI, read after find_package below) — no text parsing, no
+# guessing; consumers that hand us a prefix (the Cactus thorn) simply inherit
+# its truth. Explicit ON/OFF are *requests* the consistency guard reconciles
+# against the prefix: the `default` preset pins ON so the gating build (MPI
+# suite with the 1/2/4-rank tiers, matching every real consumer — the ET
+# AMReX prefix records MPI ON) demands an MPI prefix rather than silently
+# degrading; the `serial` preset pins OFF (its bare-name 1-rank runs are the
+# 1-rank ≡ serial cross-check, specs/build-integration.md §61).
+set(WLI_AMREX_MPI "AUTO" CACHE STRING
+    "MPI: AUTO (adopt the prefix's recorded AMReX_MPI) or explicit ON/OFF (guarded request)")
+set_property(CACHE WLI_AMREX_MPI PROPERTY STRINGS AUTO ON OFF)
 
 # Test suite toggle. ON (default) builds and registers the full ctest suite via
 # add_subdirectory(test) — byte-for-byte the current default build. OFF is the
@@ -119,6 +123,22 @@ endif()
 
 # AMReX_* facts are read-only here — never FORCE them.
 find_package(AMReX REQUIRED CONFIG PATHS "${WLI_AMREX_INSTALL_DIR}")
+
+# WLI_AMREX_MPI=AUTO resolves here: adopt the value the prefix recorded
+# (a normal variable shadowing the cache entry — the cache keeps AUTO, so a
+# later prefix swap re-derives instead of freezing the first answer). Because
+# the resolved value IS the recorded value, AUTO can never trip the MPI guard
+# below; the guard fires only for explicit ON/OFF requests.
+if(WLI_AMREX_MPI STREQUAL "AUTO")
+  if(AMReX_MPI)
+    set(WLI_AMREX_MPI ON)
+  else()
+    set(WLI_AMREX_MPI OFF)
+  endif()
+  message(STATUS
+      "WLI_AMREX_MPI=AUTO: derived MPI=${WLI_AMREX_MPI} from the AMReX prefix "
+      "at '${WLI_AMREX_INSTALL_DIR}'")
+endif()
 
 # Configuration-consistency guard (specs/cactus-integration.md §63): a
 # mismatch between the requested backend/MPI and what the install records is a

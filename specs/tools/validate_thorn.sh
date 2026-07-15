@@ -60,6 +60,20 @@ require() {
   fi
 }
 
+# Forbid a fixed string in a file — the negative counterpart of require().
+forbid() {
+  local file="$1" needle="$2" label="$3"
+  if [ ! -f "$file" ]; then
+    fail "$label: file missing, cannot check absence of: $needle"
+    return
+  fi
+  if grep -Fq -e "$needle" "$file"; then
+    fail "$label: still contains forbidden '$needle'"
+  else
+    pass "$label: free of '$needle'"
+  fi
+}
+
 # --------------------------------------------------------------------------------------
 # (1) All four thorn files exist under cactus/thorns/WeakLibInterp/.
 # --------------------------------------------------------------------------------------
@@ -96,6 +110,14 @@ require "$BUILD_SH" "WLI_AMREX_INSTALL_DIR" "build.sh"
 require "$BUILD_SH" "WLI_BUILD_TESTS=OFF"   "build.sh"
 require "$BUILD_SH" "CMAKE_INSTALL_PREFIX"  "build.sh"
 require "$BUILD_SH" "--target install"      "build.sh"
+# MPI is never guessed, passed, or parsed by the thorn: WLI's own CMake
+# defaults WLI_AMREX_MPI=AUTO and adopts the AMReX_MPI fact find_package
+# reads from the prefix. Pin both halves of that contract — the thorn stays
+# silent, and the root CMakeLists.txt carries the AUTO default + derivation.
+forbid  "$BUILD_SH" "AMREX_ENABLE_MPI"      "build.sh"
+forbid  "$BUILD_SH" "WLI_AMREX_MPI"         "build.sh"
+require "$REPO_ROOT/CMakeLists.txt" 'set(WLI_AMREX_MPI "AUTO" CACHE STRING' "CMakeLists.txt"
+require "$REPO_ROOT/CMakeLists.txt" 'if(WLI_AMREX_MPI STREQUAL "AUTO")'     "CMakeLists.txt"
 
 # --------------------------------------------------------------------------------------
 # (5) make.code.deps gates a done/ stamp on build.sh.

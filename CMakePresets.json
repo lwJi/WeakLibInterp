@@ -8,6 +8,7 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "WLI_AMREX_MPI": "ON",
         "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/mpi"
       }
     },
