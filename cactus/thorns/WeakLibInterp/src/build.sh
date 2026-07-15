@@ -16,9 +16,11 @@ set -e
 ################################################################################
 # Locate the repository root from the thorn's src/ directory (spec:87):
 #   src -> WeakLibInterp -> thorns -> cactus -> <repo root>
+# pwd -P: the arrangement entry is a symlink into this repo (GetComponents
+# style), so the logical path would walk up the Cactus tree, not the checkout.
 ################################################################################
-WLI_SRCDIR="$(cd "$(dirname "$0")" && pwd)"
-WLI_REPO_ROOT="$(cd "${WLI_SRCDIR}/../../../.." && pwd)"
+WLI_SRCDIR="$(cd "$(dirname "$0")" && pwd -P)"
+WLI_REPO_ROOT="$(cd "${WLI_SRCDIR}/../../../.." && pwd -P)"
 
 ################################################################################
 # Resolve prefix + build tree (matches detect.sh, spec:45). Both live under

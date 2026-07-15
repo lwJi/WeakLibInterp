@@ -1,0 +1,5 @@
+# Parameter definitions for thorn WeakLibInterp
+#
+# None — find-or-build is steered by the configuration-time option variables
+# WEAKLIBINTERP_DIR / WEAKLIBINTERP_INSTALL_DIR (configuration.ccl), not by
+# runtime parameters.

@@ -1,0 +1,19 @@
+# wli.th — minimal compile thornlist for the isolated `configs/wli` Cactus
+# configuration (specs/cactus-integration.md V#5, driven by
+# tools/cactus-build.sh).
+#
+# This is the list Compile-ETK copies into configs/wli/ThornList — a compile
+# list over an existing Cactus checkout, NOT a GetComponents fetch list. It
+# carries only what the WeakLibInterp thorn's configuration.ccl pulls in — the
+# ET ExternalLibraries providers (AMReX, HDF5 + the zlib it REQUIRES, MPI) —
+# plus the provider thorn itself and the TestWeakLibInterp scratch consumer
+# (REQUIRES WeakLibInterp) that forces libwli_lib.a members into the link so
+# the driver's nm assertion is real; the flesh is the checkout. The working
+# carpetx configuration keeps its own thornlist and is never touched.
+
+ExternalLibraries/AMReX
+ExternalLibraries/HDF5
+ExternalLibraries/MPI
+ExternalLibraries/zlib
+WeakLibInterp/WeakLibInterp
+WeakLibInterp/TestWeakLibInterp

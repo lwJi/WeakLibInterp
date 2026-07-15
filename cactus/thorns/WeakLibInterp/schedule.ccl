@@ -1,0 +1,5 @@
+# Schedule definitions for thorn WeakLibInterp
+#
+# Nothing scheduled — consumers call the header-inline device entry points and
+# host-side loaders directly (specs/cactus-integration.md §67); table-load
+# scheduling is the consumer thorn's responsibility (spec:71).
