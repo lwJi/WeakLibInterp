@@ -6,12 +6,11 @@
 .claude/settings.local.json
 
 build/
+build-serial/
 build-single/
-build-mpi/
 build-notests/
 build-cuda/
 build-rocm/
-build-installed/
 build-guard/
 
 *.pyc
