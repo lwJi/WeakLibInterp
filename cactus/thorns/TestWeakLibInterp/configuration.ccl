@@ -1,0 +1,9 @@
+# Configuration definition for thorn TestWeakLibInterp
+#
+# The scratch consumer thorn from specs/cactus-integration.md V#5: its whole
+# obligation is REQUIRES WeakLibInterp (spec:51). The provider thorn's own
+# REQUIRES (AMReX HDF5 MPI) chain transitively through the generated
+# capability files, so nothing else is declared here — this thorn IS the
+# proof that a consumer needs only this one line.
+
+REQUIRES WeakLibInterp

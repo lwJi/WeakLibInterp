@@ -1,0 +1,105 @@
+{
+  "version": 4,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "MPI-ON gating build (prefix: mpi — GPU NONE, DOUBLE)",
+      "description": "The standing gate: full ctest suite including the 1/2/4-rank MPI tiers. Prefix from tools/provision-amrex.sh mpi; WLI_AMREX_HOME defaults to $HOME/wli-amrex (tools/build.sh exports it).",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "WLI_AMREX_MPI": "ON",
+        "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/mpi"
+      }
+    },
+    {
+      "name": "serial",
+      "displayName": "No-MPI variant (prefix: serial)",
+      "description": "MPI off; the bare-name 1-rank suite here is the 1-rank == serial cross-check.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-serial",
+      "cacheVariables": {
+        "WLI_AMREX_MPI": "OFF",
+        "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/serial"
+      }
+    },
+    {
+      "name": "single",
+      "displayName": "Single-precision variant (prefix: single)",
+      "description": "amrex::Real is float; proves wli::Real stays double independently. Full suite.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-single",
+      "cacheVariables": {
+        "WLI_AMREX_PRECISION": "SINGLE",
+        "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/single"
+      }
+    },
+    {
+      "name": "cuda",
+      "displayName": "CUDA compile-check (prefix: cuda) — never ctest",
+      "description": "nvcc compile of library + suite; nothing executes. tools/test.sh refuses this preset.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-cuda",
+      "cacheVariables": {
+        "WLI_GPU_BACKEND": "CUDA",
+        "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/cuda"
+      }
+    },
+    {
+      "name": "rocm",
+      "displayName": "HIP compile-check (prefix: hip) — never ctest",
+      "description": "amdclang++ compile of library + suite (set CXX=/opt/rocm/bin/amdclang++; AMReX enforces a HIP-capable compiler); nothing executes. tools/test.sh refuses this preset.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-rocm",
+      "cacheVariables": {
+        "WLI_GPU_BACKEND": "HIP",
+        "WLI_AMREX_INSTALL_DIR": "$env{WLI_AMREX_HOME}/hip"
+      }
+    },
+    {
+      "name": "notests",
+      "displayName": "Library-only build (prefix: mpi) — no tests registered",
+      "description": "The Cactus consumption shape: wli_lib alone, ctest -N lists 0. tools/test.sh refuses this preset.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-notests",
+      "cacheVariables": {
+        "WLI_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "guard-trip",
+      "displayName": "DELIBERATE MISMATCH — configure must FAIL",
+      "description": "Requests WLI_GPU_BACKEND=CUDA against the GPU-NONE mpi prefix so the consistency guard trips; exists solely for the negative check (inverted exit + grep 'AMReX GPU-backend mismatch'). Never built, never tested.",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build-guard",
+      "cacheVariables": {
+        "WLI_GPU_BACKEND": "CUDA"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default", "jobs": 4 },
+    { "name": "serial", "configurePreset": "serial", "jobs": 4 },
+    { "name": "single", "configurePreset": "single", "jobs": 4 },
+    { "name": "cuda", "configurePreset": "cuda", "jobs": 4 },
+    { "name": "rocm", "configurePreset": "rocm", "jobs": 4 },
+    { "name": "notests", "configurePreset": "notests", "jobs": 4 }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "serial",
+      "configurePreset": "serial",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "single",
+      "configurePreset": "single",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

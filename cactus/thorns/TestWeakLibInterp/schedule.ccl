@@ -1,0 +1,11 @@
+# Schedule definitions for thorn TestWeakLibInterp
+#
+# The registration below is what forces src/test_wli.cxx's object into the
+# cactus_wli link (the flesh's schedule bindings reference the function), so
+# tools/cactus-build.sh can assert at symbol level that libwli_lib.a members
+# were really pulled — no parfile run needed or intended.
+
+SCHEDULE TestWeakLibInterp_Startup AT startup
+{
+  LANG: C
+} "Assert the linked WeakLibInterp value type is double-sized"

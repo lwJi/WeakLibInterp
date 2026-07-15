@@ -1,0 +1,6 @@
+# Interface definition for thorn WeakLibInterp
+#
+# ExternalLibraries-style wrapper thorn: no grid variables, no functions —
+# the deliverable is the detected/built library (configuration.ccl).
+
+IMPLEMENTS: WeakLibInterp

@@ -9,6 +9,12 @@
 # Cactus INCLUDE_DIRECTORY / LIBRARY_DIRECTORY / LIBRARY (spec:51). The build
 # itself is driven by make.code.deps -> src/build.sh during the make phase; a
 # build-mode build failure is caught there (the other half of spec:69).
+#
+# Configure-time state reaches the make phase only through MAKE_DEFINITION
+# (which make.code.deps then `export`s into build.sh's environment); a plain
+# `export` here dies with this process. WEAKLIBINTERP_BUILD gates the
+# make.code.deps build rule; in detect mode the done stamp is pre-created so
+# make never invokes build.sh (both per the ExternalLibraries-AMReX pattern).
 
 set -e
 
@@ -25,16 +31,21 @@ WLI_PREFIX="${WEAKLIBINTERP_INSTALL_DIR:-${SCRATCH_BUILD}/external/WeakLibInterp
 ################################################################################
 if [ -z "${WEAKLIBINTERP_DIR:-}" ] || [ "${WEAKLIBINTERP_DIR}" = "BUILD" ]; then
 
+    WEAKLIBINTERP_BUILD=1
+
     echo "BEGIN MESSAGE"
     echo "Building WeakLibInterp from the repository checkout into ${WLI_PREFIX}"
     echo "END MESSAGE"
 
-    # Hand the resolved prefix to the build script (make.code.deps -> build.sh).
-    export WEAKLIBINTERP_INSTALL_DIR="${WLI_PREFIX}"
+    # A prior detect-mode configure pre-created the done stamp; left in place
+    # it would satisfy the make.code.deps rule and silently skip this build
+    # (the stale-stamp hazard the ET AMReX thorn itself has on mode switches).
+    rm -f "${SCRATCH_BUILD}/done/WeakLibInterp"
 
 else
 
     # Detect-only: WEAKLIBINTERP_DIR names a pre-installed prefix; no build.
+    WEAKLIBINTERP_BUILD=
     WLI_PREFIX="${WEAKLIBINTERP_DIR}"
 
     echo "BEGIN MESSAGE"
@@ -56,6 +67,11 @@ else
         exit 1
     fi
 
+    # Nothing to build: pre-create the done stamp so the make.code.deps rule
+    # (and build.sh) never fires, exactly as ExternalLibraries-AMReX does.
+    mkdir -p "${SCRATCH_BUILD}/done"
+    date > "${SCRATCH_BUILD}/done/WeakLibInterp"
+
 fi
 
 ################################################################################
@@ -64,7 +80,9 @@ fi
 # "WeakLibInterp"/"wli", or the consumer link fails.
 ################################################################################
 echo "BEGIN MAKE_DEFINITION"
-echo "WeakLibInterp_DIR = ${WLI_PREFIX}"
+echo "WeakLibInterp_DIR         = ${WLI_PREFIX}"
+echo "WEAKLIBINTERP_BUILD       = ${WEAKLIBINTERP_BUILD}"
+echo "WEAKLIBINTERP_INSTALL_DIR = ${WLI_PREFIX}"
 echo "END MAKE_DEFINITION"
 
 echo "INCLUDE_DIRECTORY ${WLI_PREFIX}/include"

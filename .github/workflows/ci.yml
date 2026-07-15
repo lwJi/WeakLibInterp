@@ -20,6 +20,19 @@ env:
   # exact tag (nvidia/cuda:12.6.3-devel-ubuntu24.04, rocm/dev-ubuntu-24.04:6.4.1)
   # in their container.image fields — bump those deliberately, like the refs.
 
+# Vocabulary identity: every AMReX-consuming job speaks the exact commands a
+# developer types locally — restore-cache → tools/provision-amrex.sh <config>
+# → tools/build.sh <preset> → tools/test.sh <preset> (CPU jobs only). No WLI
+# cache flag is set anywhere in this file: flags live in CMakePresets.json,
+# the AMReX flag base lives in tools/provision-amrex.sh.
+#
+# Caching holds the finished prefix store entry ($HOME/wli-amrex/<config>),
+# not per-object compiles: a hit restores the installed prefix and the
+# provisioner's skip-if-valid probe turns the provision step into a no-op; a
+# miss exercises the identical provision-on-miss flow a fresh laptop does.
+# Each key invalidates on exactly the two inputs that can change a prefix —
+# the pinned AMREX_REF and the provisioner script's own content.
+
 jobs:
   validate-specs:
     name: Spec validation (default mode)
@@ -54,225 +67,17 @@ jobs:
           WEAKLIB_ROOT: ${{ github.workspace }}/weaklib
         run: bash specs/tools/validate_specs.sh
 
+  # The standing gate: the default preset (mpi prefix — MPI ON, GPU NONE,
+  # DOUBLE), full ctest including the 1/2/4-rank tiers. Bare runs-on
+  # (non-root runner) keeps the baked-in plain --oversubscribe sufficient; no
+  # container / --allow-run-as-root needed. Production-table cells return 77
+  # (SKIP) with WL_TABLES_ROOT unset; the synthetic-table suite is the
+  # always-on signal. This job also absorbs the old installed-AMReX rehearsal
+  # checks in the new vocabulary: the guard-trip preset (cactus-integration.md
+  # V#2) and the library-only install + scratch-TU check (V#3). V#1
+  # (installed-AMReX mode) needs no separate job — find-only IS the only mode.
   build-test:
-    name: Build + ctest (double precision)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - name: Checkout WeakLibInterp
-        uses: actions/checkout@v4
-        with:
-          path: WeakLibInterp
-
-      - name: Checkout pinned AMReX
-        uses: actions/checkout@v4
-        with:
-          repository: AMReX-Codes/amrex
-          ref: ${{ env.AMREX_REF }}
-          path: amrex
-
-      - name: Install HDF5
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libhdf5-dev
-
-      # AMReX compilation dominates CI time; ccache keyed on the pinned AMReX
-      # revision turns the ~15-20 min cold build into a few minutes warm.
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: amrex-${{ env.AMREX_REF }}
-          max-size: 1G
-
-      - name: Configure
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-      - name: Build
-        run: cmake --build WeakLibInterp/build --parallel 4
-
-      # Production-table tests return 77 (SKIP) with WL_TABLES_ROOT unset;
-      # the synthetic-table suite is the always-on signal.
-      - name: Run regression suite
-        run: ctest --test-dir WeakLibInterp/build --output-on-failure
-
-  # Correctness-gating MPI tier: a second (AMReX_MPI=ON) tree that actually
-  # runs ctest — unlike the compile-only GPU jobs, MPI parallelism runs on the
-  # CPU runner, so this job exercises the 1/2/4-rank suite for real. Bare
-  # runs-on (non-root runner) keeps plain --oversubscribe sufficient; no
-  # container / --allow-run-as-root needed (specs/build-integration.md §61,72).
-  build-test-mpi:
-    name: Build + ctest (MPI, 2/4 ranks)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - name: Checkout WeakLibInterp
-        uses: actions/checkout@v4
-        with:
-          path: WeakLibInterp
-
-      - name: Checkout pinned AMReX
-        uses: actions/checkout@v4
-        with:
-          repository: AMReX-Codes/amrex
-          ref: ${{ env.AMREX_REF }}
-          path: amrex
-
-      # OpenMPI (libopenmpi-dev/openmpi-bin) puts mpiexec on PATH so the
-      # if(WLI_AMREX_MPI) find_package(MPI REQUIRED COMPONENTS CXX) resolves.
-      - name: Install HDF5 and MPI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libhdf5-dev libopenmpi-dev openmpi-bin
-
-      # AMReX_MPI=ON is a distinct AMReX compile, so it needs its own ccache
-      # key separate from build-test's amrex-<ref>.
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: amrex-mpi-${{ env.AMREX_REF }}
-          max-size: 1G
-
-      - name: Configure (MPI)
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build-mpi
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_AMREX_MPI=ON
-          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-      - name: Build
-        run: cmake --build WeakLibInterp/build-mpi --parallel 4
-
-      # One unfiltered ctest covers all three rank tiers: bare test names run
-      # at 1 rank via the global CMAKE_TEST_LAUNCHER, and every _np2/_np4 name
-      # is separately registered. Production-table tests SKIP (77) with
-      # WL_TABLES_ROOT unset, as in build-test.
-      - name: Run regression suite (1/2/4 ranks)
-        run: ctest --test-dir WeakLibInterp/build-mpi --output-on-failure
-
-  # Compile-only GPU checks (CarpetX model): build the library + full suite
-  # with the device compiler to catch missing AMREX_GPU_HOST_DEVICE qualifiers
-  # and host-only calls in device code. No ctest — runners have no GPU; the
-  # CPU build-test job above stays the correctness-bearing gate
-  # (specs/build-integration.md).
-  build-cuda:
-    name: Build (CUDA compile check, sm_80)
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    container:
-      image: nvidia/cuda:12.6.3-devel-ubuntu24.04
-    steps:
-      # The devel image has gcc/nvcc but not cmake/git/HDF5.
-      - name: Install toolchain
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates cmake g++ git libhdf5-dev
-
-      - name: Checkout WeakLibInterp
-        uses: actions/checkout@v4
-        with:
-          path: WeakLibInterp
-
-      - name: Checkout pinned AMReX
-        uses: actions/checkout@v4
-        with:
-          repository: AMReX-Codes/amrex
-          ref: ${{ env.AMREX_REF }}
-          path: amrex
-
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: amrex-cuda-${{ env.AMREX_REF }}
-          max-size: 2G
-
-      - name: Configure (CUDA)
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_GPU_BACKEND=CUDA
-          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
-
-      - name: Build (no ctest — no GPU on the runner)
-        run: cmake --build WeakLibInterp/build --parallel 4
-
-  build-rocm:
-    name: Build (ROCm compile check, gfx90a)
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    container:
-      image: rocm/dev-ubuntu-24.04:6.4.1
-    steps:
-      # The dev image has the ROCm/HIP toolchain but not cmake/git/HDF5;
-      # g++ supplies the libstdc++ headers amdclang++ compiles against.
-      # rocrand/rocprim/hiprand dev packages (from the image's ROCm apt repo)
-      # satisfy AMReX's HIP-backend find_package(rocrand/rocprim/hiprand)
-      # (amrex/Tools/CMake/AMReXParallelBackends.cmake:309-311); rocsparse is
-      # not needed because AMReX_LINEAR_SOLVERS is forced OFF.
-      - name: Install toolchain
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates cmake g++ git libhdf5-dev \
-            rocrand-dev rocprim-dev hiprand-dev
-
-      - name: Checkout WeakLibInterp
-        uses: actions/checkout@v4
-        with:
-          path: WeakLibInterp
-
-      - name: Checkout pinned AMReX
-        uses: actions/checkout@v4
-        with:
-          repository: AMReX-Codes/amrex
-          ref: ${{ env.AMREX_REF }}
-          path: amrex
-
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: amrex-rocm-${{ env.AMREX_REF }}
-          max-size: 2G
-
-      # AMReX requires an AMD/Cray HIP compiler as CMAKE_CXX_COMPILER for HIP
-      # builds; CMAKE_PREFIX_PATH lets find_package(hip) resolve the ROCm
-      # CMake packages under /opt/rocm.
-      - name: Configure (HIP)
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_GPU_BACKEND=HIP
-          -DCMAKE_CXX_COMPILER=/opt/rocm/bin/amdclang++
-          -DCMAKE_PREFIX_PATH=/opt/rocm
-          -DWLI_AMREX_ROOT="${GITHUB_WORKSPACE}/amrex"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-      - name: Build (no ctest — no GPU on the runner)
-        run: cmake --build WeakLibInterp/build --parallel 4
-
-  # Cactus/ET consumption rehearsal (specs/cactus-integration.md Verification
-  # #1-#3): consume AMReX as a pre-built INSTALL prefix instead of the sibling
-  # source tree. Builds a CPU-only/double AMReX install, then exercises the
-  # three installed-AMReX contracts in separate build trees (never colliding
-  # with build-test's build/): (#1) full library+suite build & unfiltered ctest
-  # in installed mode; (#2) the config-consistency guard hard-errors when a
-  # CUDA backend is requested against the NONE install; (#3) a tests-off WLI
-  # install links from a bare -I/-L prefix (no CMake package-config, spec:51)
-  # via a scratch translation unit. Verification #4 (default build/ unchanged)
-  # is already covered by build-test, so it is intentionally not repeated here.
-  build-test-installed-amrex:
-    name: Installed-AMReX rehearsal
+    name: Build + ctest (default preset — MPI, 1/2/4 ranks)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -288,64 +93,45 @@ jobs:
           ref: ${{ env.AMREX_REF }}
           path: amrex
 
-      - name: Install HDF5
+      # OpenMPI (libopenmpi-dev/openmpi-bin) puts mpiexec on PATH so the
+      # MPI-ON default resolves find_package(MPI REQUIRED COMPONENTS CXX).
+      - name: Install HDF5 and MPI
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libhdf5-dev
+          sudo apt-get install -y --no-install-recommends libhdf5-dev libopenmpi-dev openmpi-bin
 
-      # Distinct ccache key: the CPU-only/double install build here is a third
-      # AMReX configuration, separate from amrex-<ref> and amrex-mpi-<ref>.
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+      - name: Cache AMReX prefix store (mpi)
+        uses: actions/cache@v4
         with:
-          key: amrex-installed-${{ env.AMREX_REF }}
-          max-size: 1G
+          path: ~/wli-amrex/mpi
+          key: amrex-mpi-${{ env.AMREX_REF }}-${{ hashFiles('WeakLibInterp/tools/provision-amrex.sh') }}
 
-      # Step A (Verification #1 prep): build+install a CPU-only, double, no-MPI
-      # AMReX into amrex-prefix. No GPU/MPI here so the guard in Step C trips on
-      # a backend MISMATCH, not on a missing CUDA compiler.
-      - name: Build + install AMReX (CPU-only, double)
-        run: >
-          cmake -S amrex -B amrex-build
-          -DCMAKE_BUILD_TYPE=Release
-          -DAMReX_MPI=OFF
-          -DAMReX_LINEAR_SOLVERS=OFF
-          -DAMReX_AMRLEVEL=OFF
-          -DAMReX_PARTICLES=OFF
-          -DAMReX_TINY_PROFILE=OFF
-          -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/amrex-prefix"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          && cmake --build amrex-build --parallel 4 --target install
+      # Unconditional: on a cache hit the provisioner's skip-if-valid probe
+      # (AMReXConfig.cmake exists) prints the skip line and exits 0.
+      - name: Provision AMReX (mpi)
+        working-directory: WeakLibInterp
+        env:
+          AMREX_SRC: ${{ github.workspace }}/amrex
+        run: tools/provision-amrex.sh mpi
 
-      # Step B (Verification #1): configure/build the full library + suite in
-      # installed-AMReX mode and run unfiltered ctest. Tolerance tiers are
-      # enforced inside the test binaries; production-table cells SKIP (77) with
-      # WL_TABLES_ROOT unset, exactly as in build-test.
-      - name: Configure (installed-AMReX mode)
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build-installed
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build (default preset)
+        working-directory: WeakLibInterp
+        run: tools/build.sh
 
-      - name: Build (installed-AMReX mode)
-        run: cmake --build WeakLibInterp/build-installed --parallel 4
+      - name: Test (default preset)
+        working-directory: WeakLibInterp
+        run: tools/test.sh
 
-      - name: Run regression suite (installed-AMReX mode)
-        run: ctest --test-dir WeakLibInterp/build-installed --output-on-failure
-
-      # Step C (Verification #2): the config-consistency guard must hard-error
-      # at configure when the requested WLI_GPU_BACKEND (CUDA) disagrees with
-      # the NONE backend recorded by the install — naming both values. Invert
-      # the exit status: a SUCCESSFUL configure is the failure here.
-      - name: Config-consistency guard trips on backend mismatch
+      # Negative check (cactus-integration.md V#2): the config-consistency
+      # guard must hard-error at configure when the requested backend (CUDA)
+      # disagrees with the NONE backend the mpi prefix recorded — the
+      # guard-trip preset exists solely for this. Invert the exit status: a
+      # SUCCESSFUL configure is the failure here.
+      - name: Consistency guard trips on backend mismatch (guard-trip preset)
+        working-directory: WeakLibInterp
         run: |
-          if cmake -S WeakLibInterp -B WeakLibInterp/build-guard \
-               -DCMAKE_BUILD_TYPE=Release \
-               -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix" \
-               -DWLI_GPU_BACKEND=CUDA >guard.log 2>&1; then
+          export WLI_AMREX_HOME="$HOME/wli-amrex"
+          if cmake --preset guard-trip >guard.log 2>&1; then
             echo "ERROR: expected configure to FAIL on backend mismatch but it succeeded"
             cat guard.log
             exit 1
@@ -353,21 +139,17 @@ jobs:
           echo "configure failed as expected; checking for the guard diagnostic"
           grep -q "AMReX GPU-backend mismatch" guard.log
 
-      # Step D (Verification #3): install WLI tests-off (library-only) into
-      # wli-prefix — libwli_lib.a + a flat include/ of the public wli_*.H — then
-      # compile & link a scratch TU against that bare prefix (no CMake
-      # package-config is installed, spec:51). The scratch TU includes one
-      # header per family and odr-uses the library anchor to force linking.
-      - name: Install WeakLibInterp (tests-off, installed-AMReX mode)
-        run: >
-          cmake -S WeakLibInterp -B WeakLibInterp/build-notests
-          -DCMAKE_BUILD_TYPE=Release
-          -DWLI_BUILD_TESTS=OFF
-          -DWLI_AMREX_INSTALL_DIR="${GITHUB_WORKSPACE}/amrex-prefix"
-          -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/wli-prefix"
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          && cmake --build WeakLibInterp/build-notests --parallel 4 --target install
+      # Library-only install check (cactus-integration.md V#3): the notests
+      # preset builds wli_lib alone; install yields lib/libwli_lib.a + a flat
+      # include/ of the public wli_*.H — no CMake package-config by design
+      # (spec:51) — then a scratch TU compiles, links, and runs from that bare
+      # -I/-L prefix.
+      - name: Build library-only (notests preset)
+        working-directory: WeakLibInterp
+        run: tools/build.sh notests
+
+      - name: Install WeakLibInterp (library-only)
+        run: cmake --install WeakLibInterp/build-notests --prefix "${GITHUB_WORKSPACE}/wli-prefix"
 
       - name: Scratch-TU compile+link against installed prefix
         run: |
@@ -399,7 +181,9 @@ jobs:
           CPP
           cat > CMakeLists.txt <<'CML'
           cmake_minimum_required(VERSION 3.20)
-          project(wli_scratch CXX)
+          # C is enabled alongside CXX because the MPI-ON prefix's
+          # AMReXConfig.cmake runs find_dependency(MPI REQUIRED C CXX).
+          project(wli_scratch C CXX)
           find_package(AMReX REQUIRED CONFIG)
           find_package(HDF5 REQUIRED COMPONENTS C CXX)
           add_executable(scratch scratch.cpp)
@@ -420,8 +204,154 @@ jobs:
           CML
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/amrex-prefix" \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_PREFIX_PATH="$HOME/wli-amrex/mpi"
           cmake --build build --parallel 4
           ./build/scratch
+
+  # The no-MPI variant: the bare-name 1-rank suite here is the
+  # 1-rank == serial cross-check (test-name identity against build-test's
+  # tree). Same restore → provision → build → test shape, serial config.
+  build-test-serial:
+    name: Build + ctest (serial preset — no MPI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Install HDF5 and MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libhdf5-dev libopenmpi-dev openmpi-bin
+
+      - name: Cache AMReX prefix store (serial)
+        uses: actions/cache@v4
+        with:
+          path: ~/wli-amrex/serial
+          key: amrex-serial-${{ env.AMREX_REF }}-${{ hashFiles('WeakLibInterp/tools/provision-amrex.sh') }}
+
+      - name: Provision AMReX (serial)
+        working-directory: WeakLibInterp
+        env:
+          AMREX_SRC: ${{ github.workspace }}/amrex
+        run: tools/provision-amrex.sh serial
+
+      - name: Build (serial preset)
+        working-directory: WeakLibInterp
+        run: tools/build.sh serial
+
+      - name: Test (serial preset)
+        working-directory: WeakLibInterp
+        run: tools/test.sh serial
+
+  # Compile-only GPU checks (CarpetX model): build the library + full suite
+  # with the device compiler to catch missing AMREX_GPU_HOST_DEVICE qualifiers
+  # and host-only calls in device code. No ctest — runners have no GPU
+  # (tools/test.sh refuses these presets anyway); the CPU build-test job above
+  # stays the correctness-bearing gate (specs/build-integration.md).
+  build-cuda:
+    name: Build (CUDA compile check, sm_80)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    steps:
+      # The devel image has gcc/nvcc but not cmake/git/HDF5/MPI; the cuda
+      # config records MPI ON, so OpenMPI is needed like everywhere else.
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libhdf5-dev libopenmpi-dev openmpi-bin
+
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Cache AMReX prefix store (cuda)
+        uses: actions/cache@v4
+        with:
+          path: ~/wli-amrex/cuda
+          key: amrex-cuda-${{ env.AMREX_REF }}-${{ hashFiles('WeakLibInterp/tools/provision-amrex.sh') }}
+
+      - name: Provision AMReX (cuda)
+        working-directory: WeakLibInterp
+        env:
+          AMREX_SRC: ${{ github.workspace }}/amrex
+        run: tools/provision-amrex.sh cuda
+
+      - name: Build (cuda preset — no ctest, no GPU on the runner)
+        working-directory: WeakLibInterp
+        run: tools/build.sh cuda
+
+  build-rocm:
+    name: Build (ROCm compile check, gfx90a)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    container:
+      image: rocm/dev-ubuntu-24.04:6.4.1
+    env:
+      # AMReX requires an AMD/Cray HIP compiler as CMAKE_CXX_COMPILER for HIP
+      # builds — the provisioner and the preset both take the toolchain from
+      # the environment; CMAKE_PREFIX_PATH lets find_package(hip) resolve the
+      # ROCm CMake packages under /opt/rocm.
+      CXX: /opt/rocm/bin/amdclang++
+      CMAKE_PREFIX_PATH: /opt/rocm
+    steps:
+      # The dev image has the ROCm/HIP toolchain but not cmake/git/HDF5/MPI;
+      # g++ supplies the libstdc++ headers amdclang++ compiles against.
+      # rocrand/rocprim/hiprand dev packages (from the image's ROCm apt repo)
+      # satisfy AMReX's HIP-backend find_package(rocrand/rocprim/hiprand);
+      # rocsparse is not needed because the provisioner keeps
+      # AMReX_LINEAR_SOLVERS OFF.
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates cmake g++ git libhdf5-dev libopenmpi-dev openmpi-bin \
+            rocrand-dev rocprim-dev hiprand-dev
+
+      - name: Checkout WeakLibInterp
+        uses: actions/checkout@v4
+        with:
+          path: WeakLibInterp
+
+      - name: Checkout pinned AMReX
+        uses: actions/checkout@v4
+        with:
+          repository: AMReX-Codes/amrex
+          ref: ${{ env.AMREX_REF }}
+          path: amrex
+
+      - name: Cache AMReX prefix store (hip)
+        uses: actions/cache@v4
+        with:
+          path: ~/wli-amrex/hip
+          key: amrex-hip-${{ env.AMREX_REF }}-${{ hashFiles('WeakLibInterp/tools/provision-amrex.sh') }}
+
+      - name: Provision AMReX (hip)
+        working-directory: WeakLibInterp
+        env:
+          AMREX_SRC: ${{ github.workspace }}/amrex
+        run: tools/provision-amrex.sh hip
+
+      - name: Build (rocm preset — no ctest, no GPU on the runner)
+        working-directory: WeakLibInterp
+        run: tools/build.sh rocm
