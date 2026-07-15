@@ -13,10 +13,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 cmake_policy(SET CMP0077 NEW)
 
 # ---------------------------------------------------------------------------
-# AMReX build configuration (force-block) — MUST precede add_subdirectory.
-# AMReX defaults MPI ON and INSTALL ON; both must be overridden here or the
-# MPI find_package fails on this (MPI-less) host. CPU-only + double precision
-# is the gating test configuration (specs/build-integration.md).
+# WLI configuration knobs. AMReX is only ever consumed as an installed prefix
+# (find_package below); these knobs are requests that the consistency guard
+# reconciles against what the prefix records. CPU-only + double precision +
+# MPI is the gating test configuration (specs/build-integration.md).
 # ---------------------------------------------------------------------------
 # Value precision of amrex::Real. Default DOUBLE is the gating build; SINGLE
 # is only for pin-verification (proving wli::Real stays double independently of
@@ -44,14 +44,14 @@ endif()
 set(WLI_CUDA_ARCH "8.0"    CACHE STRING "AMReX_CUDA_ARCH for WLI_GPU_BACKEND=CUDA")
 set(WLI_AMD_ARCH  "gfx90a" CACHE STRING "AMReX_AMD_ARCH for WLI_GPU_BACKEND=HIP")
 
-# MPI. OFF (default) is the gating serial build: CPU-only AMReX, suite runs on
-# host as a lone process. ON builds AMReX with AMReX_MPI=ON (CPU-only / double
-# unchanged) in a separate tree and runs the suite under the MPI launcher — a
-# second correctness-gating configuration (specs/build-integration.md §61). The
-# default build stays MPI-free and byte-for-byte unchanged (knob OFF forces the
-# same AMReX_MPI=OFF value as before).
-set(WLI_AMREX_MPI OFF CACHE BOOL
-    "Build AMReX with MPI (AMReX_MPI=ON) and run the suite under the MPI launcher")
+# MPI. ON (default) is the gating configuration: an AMReX_MPI=ON prefix
+# (CPU-only / double unchanged), the suite running under the MPI launcher with
+# the 1/2/4-rank tiers as the standing default suite — matching every real
+# consumer (the ET AMReX prefix records MPI ON). OFF is the serial variant in
+# its own tree; its bare-name 1-rank runs are the 1-rank ≡ serial cross-check
+# (specs/build-integration.md §61).
+set(WLI_AMREX_MPI ON CACHE BOOL
+    "Consume an AMReX_MPI=ON prefix and run the suite under the MPI launcher")
 
 # Test suite toggle. ON (default) builds and registers the full ctest suite via
 # add_subdirectory(test) — byte-for-byte the current default build. OFF is the
@@ -61,102 +61,90 @@ set(WLI_BUILD_TESTS ON CACHE BOOL
     "Build and register the ctest suite (OFF = library-only consumption build)")
 
 # ---------------------------------------------------------------------------
-# AMReX consumption mode. Empty WLI_AMREX_INSTALL_DIR (default) selects the
-# sibling-source add_subdirectory flow (byte-for-byte unchanged default build);
-# a non-empty prefix selects installed-AMReX mode via find_package(AMReX) — the
-# Cactus delivery path (specs/cactus-integration.md §53-58,62-63,85). Exactly
-# one AMReX per executable; the two branches are mutually exclusive.
+# AMReX consumption: installed-prefix only — AMReX is found, never built here
+# (specs/cactus-integration.md §53-58,62-63,85; exactly one AMReX per
+# executable). Provisioning prefixes is out-of-band: tools/provision-amrex.sh
+# builds ../amrex into the shared store ${WLI_AMREX_HOME:-$HOME/wli-amrex}/
+# <config>; existing prefixes (the ET thorn's install, CI images) plug in via
+# WLI_AMREX_INSTALL_DIR directly.
 # ---------------------------------------------------------------------------
-set(WLI_AMREX_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../amrex"
-    CACHE PATH "AMReX source tree (sibling-source consumption mode)")
 set(WLI_AMREX_INSTALL_DIR "" CACHE PATH
-    "AMReX install prefix; empty = sibling-source add_subdirectory, non-empty = installed-AMReX find_package mode")
+    "AMReX install prefix (required); provision one with tools/provision-amrex.sh")
 
-if(WLI_AMREX_INSTALL_DIR STREQUAL "")
-  # -------------------------------------------------------------------------
-  # Sibling-source mode: force AMReX's build configuration, then add_subdirectory.
-  # These AMReX_* FORCE sets are build options for the nested AMReX build; they
-  # are meaningless (and must not appear) in installed mode.
-  # -------------------------------------------------------------------------
-  set(AMReX_GPU_BACKEND    ${WLI_GPU_BACKEND} CACHE STRING "" FORCE)
-  set(AMReX_PRECISION      ${WLI_AMREX_PRECISION} CACHE STRING "" FORCE)
-  set(AMReX_MPI            ${WLI_AMREX_MPI} CACHE BOOL   "" FORCE)
-  set(AMReX_FORTRAN        OFF    CACHE BOOL   "" FORCE)
-  set(AMReX_OMP            OFF    CACHE BOOL   "" FORCE)
-  set(AMReX_INSTALL        OFF    CACHE BOOL   "" FORCE)
-
-  # Trim optional subsystems to cut build time / OOM risk on the RAM-limited host.
-  set(AMReX_LINEAR_SOLVERS OFF    CACHE BOOL   "" FORCE)
-  set(AMReX_AMRLEVEL       OFF    CACHE BOOL   "" FORCE)
-  set(AMReX_PARTICLES      OFF    CACHE BOOL   "" FORCE)
-  set(AMReX_TINY_PROFILE   OFF    CACHE BOOL   "" FORCE)
-
-  # Backend-specific knobs that must also precede add_subdirectory. CUDA needs
-  # enable_language at THIS scope: AMReX's own enable_language(CUDA) runs in its
-  # subdirectory scope and would not cover the wli targets' CUDA-language sources.
-  if(WLI_GPU_BACKEND STREQUAL "CUDA")
-    set(AMReX_CUDA_ARCH ${WLI_CUDA_ARCH} CACHE STRING "" FORCE)
-    enable_language(CUDA)
-  elseif(WLI_GPU_BACKEND STREQUAL "HIP")
-    set(AMReX_AMD_ARCH ${WLI_AMD_ARCH} CACHE STRING "" FORCE)
+# Preflight: fail with the fix in hand before find_package can produce a less
+# helpful error. The validity probe (lib/cmake/AMReX/AMReXConfig.cmake exists)
+# is the same check tools/provision-amrex.sh uses to decide a config is
+# provisioned, so both ends of the contract agree.
+if(WLI_AMREX_INSTALL_DIR STREQUAL ""
+   OR NOT EXISTS "${WLI_AMREX_INSTALL_DIR}/lib/cmake/AMReX/AMReXConfig.cmake")
+  # Recover the store config name from the prefix path's basename (the presets
+  # resolve to $WLI_AMREX_HOME/<config>, so the basename survives even when
+  # WLI_AMREX_HOME was never exported); fall back to the default config.
+  get_filename_component(_wli_amrex_cfg "${WLI_AMREX_INSTALL_DIR}" NAME)
+  if(_wli_amrex_cfg STREQUAL "")
+    set(_wli_amrex_cfg "mpi")
   endif()
+  message(FATAL_ERROR
+      "AMReX prefix missing or invalid at '${WLI_AMREX_INSTALL_DIR}' "
+      "(no lib/cmake/AMReX/AMReXConfig.cmake there).\n"
+      "Provision it once:\n"
+      "    tools/provision-amrex.sh ${_wli_amrex_cfg}\n"
+      "which installs into \$WLI_AMREX_HOME/${_wli_amrex_cfg} (WLI_AMREX_HOME "
+      "defaults to \$HOME/wli-amrex).\n"
+      "Or point WLI_AMREX_HOME at your prefix store, or set "
+      "WLI_AMREX_INSTALL_DIR to an existing AMReX install prefix directly.")
+endif()
 
-  # Resolve AMReX from the sibling checkout (test #4). Explicit binary dir
-  # because AMReX forbids in-source builds.
-  add_subdirectory(${WLI_AMREX_ROOT} ${CMAKE_BINARY_DIR}/amrex)
+# An MPI-ON prefix's AMReXConfig.cmake runs find_dependency(MPI REQUIRED C
+# CXX), and FindMPI can only satisfy the C component when language C is
+# enabled — in this CXX-only project it would otherwise fail inside
+# find_package(AMReX) with "language C is not enabled", masking the
+# consistency guard below as the diagnostic for MPI mismatches. Enable C
+# unconditionally (cheap: compiler detection only; nothing compiles as C).
+enable_language(C)
 
-  # The CUDA helper (setup_target_for_cuda_compilation) is not on the module
-  # path in source mode, so include it by explicit path.
-  if(WLI_GPU_BACKEND STREQUAL "CUDA")
-    include(${WLI_AMREX_ROOT}/Tools/CMake/AMReXTargetHelpers.cmake)
-  endif()
+# AMReX_* facts are read-only here — never FORCE them.
+find_package(AMReX REQUIRED CONFIG PATHS "${WLI_AMREX_INSTALL_DIR}")
+
+# Configuration-consistency guard (specs/cactus-integration.md §63): a
+# mismatch between the requested backend/MPI and what the install records is a
+# configure-time hard error naming both values. Runs BEFORE any
+# enable_language(CUDA) so a CUDA-vs-NONE mismatch produces THIS diagnostic
+# rather than a "no CUDA compiler" error on a host without nvcc. Precision is
+# exempt: wli::Real stays double regardless of AMReX_PRECISION.
+if(NOT WLI_GPU_BACKEND STREQUAL AMReX_GPU_BACKEND)
+  message(FATAL_ERROR
+      "AMReX GPU-backend mismatch: requested WLI_GPU_BACKEND='${WLI_GPU_BACKEND}' "
+      "but the install at '${WLI_AMREX_INSTALL_DIR}' records "
+      "AMReX_GPU_BACKEND='${AMReX_GPU_BACKEND}'. Point WLI_AMREX_INSTALL_DIR at a "
+      "matching install or set WLI_GPU_BACKEND to match.")
+endif()
+
+# Normalize both MPI settings to a canonical bool before comparing.
+if(WLI_AMREX_MPI)
+  set(_wli_mpi_requested ON)
 else()
-  # -------------------------------------------------------------------------
-  # Installed-AMReX mode: consume a pre-built prefix (the ET AMReX thorn's
-  # install). AMReX_* facts are read-only here — never FORCE them.
-  # -------------------------------------------------------------------------
-  find_package(AMReX REQUIRED CONFIG PATHS "${WLI_AMREX_INSTALL_DIR}")
+  set(_wli_mpi_requested OFF)
+endif()
+if(AMReX_MPI)
+  set(_wli_mpi_recorded ON)
+else()
+  set(_wli_mpi_recorded OFF)
+endif()
+if(NOT _wli_mpi_requested STREQUAL _wli_mpi_recorded)
+  message(FATAL_ERROR
+      "AMReX MPI mismatch: requested WLI_AMREX_MPI='${_wli_mpi_requested}' but the "
+      "install at '${WLI_AMREX_INSTALL_DIR}' records AMReX_MPI='${_wli_mpi_recorded}'. "
+      "Point WLI_AMREX_INSTALL_DIR at a matching install or set WLI_AMREX_MPI to match.")
+endif()
 
-  # Configuration-consistency guard (specs/cactus-integration.md §63): a
-  # mismatch between the requested backend/MPI and what the install records is a
-  # configure-time hard error naming both values. Runs BEFORE any
-  # enable_language(CUDA) so a CUDA-vs-NONE mismatch produces THIS diagnostic
-  # rather than a "no CUDA compiler" error on a host without nvcc. Precision is
-  # exempt: wli::Real stays double regardless of AMReX_PRECISION.
-  if(NOT WLI_GPU_BACKEND STREQUAL AMReX_GPU_BACKEND)
-    message(FATAL_ERROR
-        "AMReX GPU-backend mismatch: requested WLI_GPU_BACKEND='${WLI_GPU_BACKEND}' "
-        "but the install at '${WLI_AMREX_INSTALL_DIR}' records "
-        "AMReX_GPU_BACKEND='${AMReX_GPU_BACKEND}'. Point WLI_AMREX_INSTALL_DIR at a "
-        "matching install or set WLI_GPU_BACKEND to match.")
-  endif()
-
-  # Normalize both MPI settings to a canonical bool before comparing.
-  if(WLI_AMREX_MPI)
-    set(_wli_mpi_requested ON)
-  else()
-    set(_wli_mpi_requested OFF)
-  endif()
-  if(AMReX_MPI)
-    set(_wli_mpi_recorded ON)
-  else()
-    set(_wli_mpi_recorded OFF)
-  endif()
-  if(NOT _wli_mpi_requested STREQUAL _wli_mpi_recorded)
-    message(FATAL_ERROR
-        "AMReX MPI mismatch: requested WLI_AMREX_MPI='${_wli_mpi_requested}' but the "
-        "install at '${WLI_AMREX_INSTALL_DIR}' records AMReX_MPI='${_wli_mpi_recorded}'. "
-        "Point WLI_AMREX_INSTALL_DIR at a matching install or set WLI_AMREX_MPI to match.")
-  endif()
-
-  # enable_language(CUDA) at THIS scope for the wli targets (as in source mode),
-  # only after the guard has confirmed the install is a CUDA build. The helper
-  # ships in the install's module dir, which AMReXConfig.cmake prepends to
-  # CMAKE_MODULE_PATH, so include it by bare name.
-  if(WLI_GPU_BACKEND STREQUAL "CUDA")
-    enable_language(CUDA)
-    include(AMReXTargetHelpers)
-  endif()
+# enable_language(CUDA) at THIS scope for the wli targets, only after the
+# guard has confirmed the install is a CUDA build. The helper ships in the
+# install's module dir, which AMReXConfig.cmake prepends to
+# CMAKE_MODULE_PATH, so include it by bare name.
+if(WLI_GPU_BACKEND STREQUAL "CUDA")
+  enable_language(CUDA)
+  include(AMReXTargetHelpers)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -184,19 +172,19 @@ find_package(HDF5 REQUIRED COMPONENTS C CXX)
 enable_testing()
 
 # ---------------------------------------------------------------------------
-# MPI launcher for the suite. AMReX's own AMReXParallelBackends.cmake already
-# find_package(MPI)s inside add_subdirectory(amrex) so wli_lib/tests link MPI
-# transitively via AMReX::amrex; the explicit top-level find here is what
+# MPI launcher for the suite. The installed prefix's AMReXConfig.cmake already
+# find_dependency(MPI)s so wli_lib/tests link MPI transitively via
+# AMReX::amrex; the explicit top-level find here is what
 # populates MPIEXEC_EXECUTABLE / MPIEXEC_NUMPROC_FLAG. CMAKE_TEST_LAUNCHER
 # (CMake >= 3.29) is prepended to every add_test whose COMMAND is an executable
 # target, so all 19 test targets run under `mpiexec -n 1` with zero edits to
 # test/CMakeLists.txt. Empty when the knob is OFF -> default build unchanged.
 # ---------------------------------------------------------------------------
 if(WLI_AMREX_MPI)
-  # Only the CXX component is requested: this project enables CXX (project(...
-  # CXX)), so a C-component request would fail with "language C is not enabled".
-  # MPIEXEC_EXECUTABLE / MPIEXEC_NUMPROC_FLAG are populated regardless of the
-  # requested language component. Link wiring comes transitively via AMReX.
+  # Only the CXX component is requested: this find exists solely for the
+  # launcher variables, and MPIEXEC_EXECUTABLE / MPIEXEC_NUMPROC_FLAG are
+  # populated regardless of the requested language component. Link wiring
+  # comes transitively via AMReX.
   find_package(MPI REQUIRED COMPONENTS CXX)
   set(CMAKE_TEST_LAUNCHER
       "${MPIEXEC_EXECUTABLE};${MPIEXEC_NUMPROC_FLAG};1")
