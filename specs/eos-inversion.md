@@ -8,6 +8,7 @@ This spec defines the device-callable inversion of the EOS table: given a densit
 
 In scope:
 - The three inversion families `DEY` (X = internal energy), `DPY` (X = pressure), `DSY` (X = entropy per baryon) — identical algorithm, different dependent-variable sub-table.
+- The bounds-initialization contract (`InitializeEOSInversion`): the public entry point a consumer calls once per loaded table that derives the cached `Min/Max` bounds from the grids and the three recovered sub-tables and arms the initialized state consumed by the input check.
 - The single-point evaluate contract `(ρ, X, Yₑ [, T_guess]) → (T, Error)`, in both the `Guess` (a temperature guess is supplied) and `NoGuess` variants.
 - The integer error-code set `{0, 01, 02, 03, 10, 11, 13}`, its meaning, the `DescribeEOSInversionError` mapping, and the `_Error` vs `_NoError` reporting contract.
 - The `T = 0`-on-failure signaling convention.
@@ -16,7 +17,7 @@ In scope:
 - Boundary / NaN handling specific to inversion (input-bounds validation, NaN detection).
 
 Out of scope:
-- The forward direction `(ρ, T, Yₑ) → value` and its derivatives — see `eos-interpolation.md`. (Inversion *uses* the 2D `(ρ, Yₑ)` forward evaluation at fixed temperature nodes internally, but the forward single-variable 3D contract is specified there.)
+- The forward direction `(ρ, T, Yₑ) → value` and its derivatives — see `eos-interpolation.md`. (Inversion *uses* the 2D `(ρ, Yₑ)` forward evaluation at fixed temperature nodes internally; both the public 2D `_Custom_Point` contract and the 3D contract are specified there.)
 - The multi-point array (`_Many`) host-level forms (the device contract here is the scalar single-point form; an array form is the host-level `ParallelFor` wrapper over it — see `amrex-device-interface.md`).
 - The on-disk HDF5 layout the table/axes/offsets are read from — see `table-format-and-io.md`.
 - Opacity channels — see the `opacity-*` specs.
@@ -30,7 +31,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
   - `InverseLogInterp( x_a, x_b, y_a, y_b, y, OS )` (function at `wlEOSInversionModule.F90:253-267`) — the final inversion step, log-linear in both the bracketing temperatures `x_a,x_b` and the dependent-variable values `y_a,y_b`: `10**( log10(x_a) + log10(x_b/x_a) · log10((y+OS)/(y_a+OS)) / log10((y_b+OS)/(y_a+OS)) )`.
   - `ComputeTemperatureWith_DXY_Guess( D, X, Y, Ds, Ts, Ys, Xs, OS, T, T_Guess, Error )` (subroutine at `wlEOSInversionModule.F90:270-440`) — the guess-driven kernel: checks the guess cell first; if `f_a·f_b ≤ 0` there it inverts immediately; otherwise checks the full `[Ts(1), Ts(SizeTs)]` range, bisects on table nodes if it brackets, and if not linear-scans for the sign change nearest the guess index. Sets `Error = 13` if no root is found.
   - `ComputeTemperatureWith_DXY_NoGuess( D, X, Y, Ds, Ts, Ys, Xs, OS, T, Error )` (subroutine at `wlEOSInversionModule.F90:443-573`) — identical algorithm without a guess; on the no-bracket fall-through it selects the **highest-temperature** root.
-  - `InitializeEOSInversion( Ds, Ts, Ys, Es, Ps, Ss, Verbose_Option )` (subroutine at `wlEOSInversionModule.F90:139-185`) — caches `MIN/MAXVAL` of each grid/value array into the bounds used by `CheckInputError`; it performs no interpolation.
+  - `InitializeEOSInversion( Ds, Ts, Ys, Es, Ps, Ss, Verbose_Option )` (subroutine at `wlEOSInversionModule.F90:139-185`) — caches `MIN/MAXVAL` of each grid/value array into the bounds used by `CheckInputError` and arms the initialized flag; it performs no interpolation. The value arrays `Es`/`Ps`/`Ss` it receives are **recovered physical** values — its thornado call site (`InitializeEquationOfState_TABLE` in `thornado/Modules/EquationOfState/EquationOfStateModule_TABLE.F90`) converts the log-stored tables via `10**stored - OS` immediately before the call — so the cached `MinX/MaxX` are physical-value bounds, directly comparable to the query `X`.
   - `DescribeEOSInversionError( Error )` (subroutine at `wlEOSInversionModule.F90:230-250`) — maps each code to a human string; aborts (`STOP`) on `Error > 13`.
   - The public wrapper matrix `ComputeTemperatureWith_{DEY,DPY,DSY}_{Single,Many}_{Guess,NoGuess}_{Error,NoError}` (subroutines spanning `wlEOSInversionModule.F90:576-1005`) — thin dispatch over the two `_DXY_` kernels, selecting the `E`/`P`/`S` sub-table; the `_NoError` variants discard the returned code.
 - `weaklib/Distributions/Library/wlInterpolationModule.F90` — `LogInterpolateSingleVariable_2D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1115-1165`), the bilinear-in-log evaluation of the dependent variable at a fixed temperature node over the `(ρ, Yₑ)` face that the bisection calls at each candidate `T`.
@@ -57,7 +58,7 @@ Value type is `double` throughout (weaklib `dp = 8`); see `fortran-parity-and-to
 - `Ds(1:nD)`, `Ts(1:nT)`, `Ys(1:nY)` — the strictly monotone-ascending grid-node coordinates for ρ, T, Yₑ (raw physical values; ρ is located in log space, Yₑ in linear space, and the temperature search walks `Ts` node-by-node).
 - `Xs` — the log-stored sub-table `log10(physical + OS)` for the chosen dependent variable, indexed `(iD, iT, iY)` in Fortran column-major order: as a flat `double const*` the element `Xs(iD,iT,iY)` (0-based) is `xs[ iD + nD*( iT + nT*iY ) ]` (see `amrex-device-interface.md`). This is the *same* sub-table the forward `eos-interpolation.md` evaluates; inversion holds `(ρ, Yₑ)` fixed and searches over the `T` axis.
 - `OS` — the scalar additive offset for the chosen dependent variable.
-- Bounds `MinD/MaxD`, `MinX/MaxX`, `MinY/MaxY` — the per-array `MIN/MAXVAL` cached by the initialization step and consumed by the input check; in the C++ contract these are the extents of `Ds`/`Ys` and of the recovered `X` sub-table values.
+- Bounds `MinD/MaxD`, `MinX/MaxX`, `MinY/MaxY` — the per-array `MIN/MAXVAL` cached by the initialization step and consumed by the input check; in the C++ contract these are the extents of `Ds`/`Ys` and of the recovered `X` sub-table values. The bounds-initialization entry point (see Correctness requirements) is what derives them; consumers do not hand-compute them.
 
 ### Outputs
 
@@ -88,6 +89,15 @@ Inversion recovers `T` from `(ρ, X, Yₑ)` by interval bisection on the tempera
    ```
    This is `InverseLogInterp(T_a, T_b, X_a, X_b, X, OS)`; it is the algebraic inverse of the log-linear forward interpolation in `T`.
 6. **Failure output.** On any non-zero `Error`, set `T = 0` and return; the recovered `T` is meaningful only when `Error == 0`.
+
+### Bounds-initialization contract (`InitializeEOSInversion`)
+
+A public initialization entry point must exist that, given the three grids and the three invertible sub-tables, derives the bounds consumed by the input check and arms the initialized state — mirroring `InitializeEOSInversion`:
+
+- `MinD/MaxD`, `MinT/MaxT`, `MinY/MaxY` = min/max over the raw grid arrays `Ds`, `Ts`, `Ys`. (For the strictly monotone-ascending grids these are the first/last nodes; `MinT/MaxT` are cached for symmetry with weaklib, but no inversion input is a temperature, so the input check never consults them.)
+- `MinE/MaxE`, `MinP/MaxP`, `MinS/MaxS` = min/max over the **recovered physical** values of each sub-table, `10**stored - OS` elementwise. Whether the implementation recovers elementwise then reduces, or reduces the log-stored array and recovers the extrema (equivalent because `10**x - OS` is strictly increasing), is free; the observable bounds must equal the elementwise-recovered min/max.
+- After initialization the state is armed: each family's `MinX/MaxX` selects the matching sub-table bounds (`DEY` → E, `DPY` → P, `DSY` → S), and any query made while the state is unarmed yields code `10` per the input check.
+- Queries exactly at a bound pass the check (the comparisons are strict `<` Min / `>` Max).
 
 ### Error-code protocol
 
@@ -150,21 +160,22 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 3. **Error codes (exact-equality).** Construct queries that trigger each code and assert the returned `Error` equals it: out-of-bounds ρ → `01`; out-of-bounds X → `02`; out-of-bounds Yₑ → `03`; an uninitialized-bounds state → `10`; a NaN input → `11`; a value with no sign-change bracket (e.g. `X` strictly outside the table's `[X_min, X_max]` along `T` at fixed ρ, Yₑ, or a monotone sub-table queried beyond its range) → `13`. In every non-zero-code case assert `T == 0`.
 4. **`T = 0`-on-failure signaling (exact-equality).** Confirm that the `_NoError`-style path returns `T == 0` for every failing query and a non-zero `T` for every succeeding one — the sole failure signal when the code is discarded.
 5. **No-root / non-monotone handling.** For a sub-table that is non-monotone in `T` at fixed `(ρ, Yₑ)`, confirm the `NoGuess` variant selects the highest-temperature root among the sign-change brackets, and the `Guess` variant selects the root nearest the guess index; a target with no bracket returns `Error = 13`, `T = 0`.
+6. **Bounds derivation (exact-equality).** On synthetic and real tables, the initialization entry point's derived bounds equal the directly computed min/max of the raw grids and of the elementwise-recovered `10**stored - OS` sub-table values; before initialization any query returns `Error = 10`, `T = 0`; after it, an in-bounds query reaches the code-`0` path and a query exactly at a bound is not rejected.
 
 ### Mechanical (validator)
 
-`bash specs/tools/validate_specs.sh` (default mode) asserts: the 7 mandated sections in order; the full error-code set `{0, 01, 02, 03, 10, 11, 13}` is documented; the inversion source-of-truth file `wlEOSInversionModule.F90` resolves; the `InverseLogInterp` and `ComputeTemperatureWith_DXY_*` routine names are present; the `1e-10` round-trip relaxation is named; and the documented `/DependentVariables/Internal Energy Density` and `/ThermoState/Temperature` structures appear in the committed `wl-EOS-SFHo-15-25-50.h5ls` snapshot with the table named in this spec.
+`bash specs/tools/validate_specs.sh` (default mode) asserts: the 7 mandated sections in order; the full error-code set `{0, 01, 02, 03, 10, 11, 13}` is documented; the inversion source-of-truth file `wlEOSInversionModule.F90` resolves; the `InverseLogInterp`, `ComputeTemperatureWith_DXY_*`, and `InitializeEOSInversion` routine names are present; the `1e-10` round-trip relaxation is named; and the documented `/DependentVariables/Internal Energy Density` and `/ThermoState/Temperature` structures appear in the committed `wl-EOS-SFHo-15-25-50.h5ls` snapshot with the table named in this spec.
 
 ## Implementation freedom
 
 - The internal bracket-search structure (how the guess cell, full-range bisection, and nearest-to-guess scan are organized), provided the observable `(T, Error)` contract and the `i_b == i_a + 1` convergence criterion are met.
 - Whether the fixed-`T`-node evaluation calls the shared forward bilinear core or an inlined equivalent, provided results meet tolerance.
 - Whether the three families (DEY/DPY/DSY) are separate entry points, a single entry point parameterized by the sub-table + bounds, or templated; likewise `Guess`/`NoGuess` and `Error`/`NoError`.
-- How the cached bounds (`MinD/MaxD`, `MinX/MaxX`, `MinY/MaxY`) and the "initialized" state are represented and supplied to the device-callable check.
+- How the cached bounds (`MinD/MaxD`, `MinX/MaxX`, `MinY/MaxY`) and the "initialized" state are represented and supplied to the device-callable check. The initialization entry point itself may be host-only (it runs once per table load), and may accept physical arrays (as weaklib does) or log-stored arrays plus offsets, provided the derived bounds meet the contract above.
 - Whether the multi-point (`_Many`) form is a hand-written loop or a `ParallelFor` over the single-point core.
 
 ## Open questions / assumptions
 
 - **Concrete per-variable offsets and value bounds (assumption, non-blocking).** The `OS` offsets and the `MinX/MaxX` value extents for E/P/S live only in the `.h5` file (`/DependentVariables/Offsets`, and the `MIN/MAXVAL` of each sub-table). This spec pins the algorithm and the bounds-check contract; the fixture/table supplies the numbers. The round-trip checks use the offsets/bounds read from the chosen (synthetic or real) table, so they do not depend on hard-coded production values.
-- **Initialization-state representation (assumption, non-blocking).** weaklib carries a module-level `InversionInitialized` flag (and module-global bounds scalars) that `CheckInputError` consults for code `10`. The C++ port is free to represent this however it likes (e.g. an explicit bounds struct passed to the device function); the only fixed contract is that querying with uninitialized/absent bounds yields code `10`.
+- **Initialization-state representation (assumption, non-blocking).** weaklib carries a module-level `InversionInitialized` flag (and module-global bounds scalars) that `CheckInputError` consults for code `10`. The C++ port is free to represent this however it likes (e.g. an explicit bounds struct passed to the device function); the fixed contracts are that the public initialization entry point derives and arms it (see the bounds-initialization contract) and that querying with uninitialized/absent bounds yields code `10`.
 - **Highest-temperature-root tie-breaking (assumption, non-blocking).** The `NoGuess` fall-through selects the highest-temperature root and the `Guess` fall-through the nearest-to-guess root, mirroring weaklib; for well-posed monotone sub-tables there is a single root and the tie-break is irrelevant. The non-monotone tie-break behavior is pinned to the weaklib routines named in "Source of truth".

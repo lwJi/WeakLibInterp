@@ -42,12 +42,13 @@ Every public device-callable entry point named across the leaf specs is a row of
 |---|---|---|---|
 | 1 | EOS single-variable **evaluate** — `LogInterpolateSingleVariable_3D_Custom_Point` | [eos-interpolation](./eos-interpolation.md) | 3D `(ρ, T, Yₑ)` |
 | 2 | EOS single-variable **evaluate-and-differentiate** — `LogInterpolateDifferentiateSingleVariable_3D_Custom_Point` | [eos-interpolation](./eos-interpolation.md) | 3D `(ρ, T, Yₑ)` → value + `(∂/∂ρ, ∂/∂T, ∂/∂Yₑ)` |
-| 3 | EOS **inversion** — recover `T` from `(ρ, X∈{E,P,S}, Yₑ)`, the `ComputeTemperatureWith_{DEY,DPY,DSY}_*` families over the `LogInterpolateSingleVariable_2D_Custom_Point` fixed-`T`-node evaluation | [eos-inversion](./eos-inversion.md) | 3D inverse; integer error codes, `T=0`-on-failure |
+| 3 | EOS **inversion** — recover `T` from `(ρ, X∈{E,P,S}, Yₑ)`, the `ComputeTemperatureWith_{DEY,DPY,DSY}_*` families over the `LogInterpolateSingleVariable_2D_Custom_Point` fixed-`T`-node evaluation, plus the `InitializeEOSInversion` bounds-derivation/arming entry point | [eos-inversion](./eos-inversion.md) | 3D inverse; integer error codes, `T=0`-on-failure |
 | 4 | Opacity **EmAb** evaluate — `LogInterpolateSingleVariable_4D_Custom_Point` | [opacity-emab-iso](./opacity-emab-iso.md) | 4D `(E, ρ, T, Yₑ)` |
 | 5 | Opacity **Iso** evaluate — the 5D `(E, moment, ρ, T, Yₑ)` channel evaluated via the 4D `_Point` kernel at a fixed integer moment | [opacity-emab-iso](./opacity-emab-iso.md) | 5D, moment index not interpolated |
 | 6 | Opacity **NES** evaluate — `LogInterpolateSingleVariable_2D2D_Custom_Aligned(_Point)` | [opacity-nes-pair](./opacity-nes-pair.md) | 5D `(E′, E, kernel, T, η)`, energy indices used directly, `(T, η)` bilinear |
 | 7 | Opacity **Pair** evaluate — `LogInterpolateSingleVariable_2D2D_Custom_Aligned(_Point)` | [opacity-nes-pair](./opacity-nes-pair.md) | 5D `(E′, E, kernel, T, η)`, energy indices used directly, `(T, η)` bilinear |
 | 8 | Opacity **Brem** evaluate — `SumLogInterpolateSingleVariable_2D2D_Custom_Aligned` | [opacity-brem](./opacity-brem.md) | 5D `(E′, E, moment, ρ, T)`, `[1,1,28/3]` density decomposition |
+| 9 | General **2D evaluate** — `LogInterpolateSingleVariable_2D_Custom_Point` on caller-pre-transformed coordinates (the EOS-inversion face evaluation; consumer-side opacity-kernel resampling) | [eos-interpolation](./eos-interpolation.md) | 2D `(x₁, x₂)` in interpolation space; equidistant bracket locator |
 
 This table is the **closure list**: no channel or variant may be silently uncovered. The validator (`tools/validate_specs.sh`) asserts that every public entry-point routine named in a leaf spec appears as a row here, so adding a leaf entry point without adding its coverage row fails the gate.
 
@@ -60,21 +61,21 @@ Each entry point is exercised across these four input regimes, drawn from both s
 | in-bounds | query strictly inside the grid on every axis | normal multilinear interpolation |
 | on-edge | query exactly at a grid node (and exactly on a boundary node) | node identity; the boundary cell with delta `0` or `1` |
 | out-of-range | query below `Xs(1)` or above `Xs(n)` on ≥1 axis | clamp bracket index, **unclamped delta** → linear extrapolation from the edge cell (no error, no result clamp); for inversion, the appropriate integer error code and `T=0` |
-| NaN-input | non-positive value on a log axis (so `log10` is NaN) | NaN propagates silently to the result; for inversion, the `T=0`/error-code path |
+| NaN-input | non-positive value on a log axis (so `log10` is NaN); for entry point 9, which takes no internal log, a literal NaN coordinate | NaN propagates silently to the result; for inversion, the `T=0`/error-code path |
 
 ### The MPI configuration (second gating run)
 
 In the MPI-enabled build (see `build-integration.md`; the default serial build is unaffected), the same suite re-runs unmodified under the MPI launcher at 2 and at 4 ranks — every matrix cell must pass on every rank — plus two rank-consistency cells that exist only in this configuration, both at the **exact** tier (no tolerance):
 
 - **Table-load consistency** — after each table load (synthetic fixture and, where present, production), every rank holds byte-identical arrays, extents, and offsets, per `table-format-and-io.md`'s root-read + broadcast contract.
-- **Result consistency** — for each of the 8 entry points, evaluating identical sample queries on every rank yields bitwise-identical `double` results (identical table bytes + deterministic arithmetic ⇒ exact equality across ranks).
+- **Result consistency** — for each of the 9 entry points, evaluating identical sample queries on every rank yields bitwise-identical `double` results (identical table bytes + deterministic arithmetic ⇒ exact equality across ranks).
 
 A failure on any rank fails the suite (nonzero aggregate exit status under the launcher).
 
 ### The reference tables (the two fixture sources)
 
 - **Synthetic in-suite tables** — the always-on primary. The suite builds small tables in memory with closed-form properties (affine-in-log, constant, known symmetry triangles), so the suite runs with no external files. Sizes/ranges are implementation freedom provided the closed-form property holds by construction.
-- **Named production tables** — pinned by path + `sha256` in `specs/fixtures/tables.provenance`, structure committed in `specs/fixtures/*.h5ls`: `wl-EOS-SFHo-15-25-50.h5` (entry points 1–3) and `wl-Op-SFHo-15-25-50-E40-{EmAb,Iso,NES,Pair,Brem}.h5` (entry points 4–8). These anchor the reader contract and the real-table invariants.
+- **Named production tables** — pinned by path + `sha256` in `specs/fixtures/tables.provenance`, structure committed in `specs/fixtures/*.h5ls`: `wl-EOS-SFHo-15-25-50.h5` (entry points 1–3, 9) and `wl-Op-SFHo-15-25-50-E40-{EmAb,Iso,NES,Pair,Brem}.h5` (entry points 4–8). These anchor the reader contract and the real-table invariants.
 
 ## Correctness requirements
 
@@ -106,7 +107,7 @@ The suite links AMReX (default double-precision **CPU** configuration; see `buil
 A fresh agent confirms the suite itself is correctly designed by these self-contained checks:
 
 1. **Closure (mechanical).** Every public device entry-point routine named in a leaf spec appears as a row of the coverage matrix above; running `bash specs/tools/validate_specs.sh` (default mode) asserts this and fails if a leaf names an entry point with no coverage row. This is the matrix-closure gate.
-2. **Every row × every regime is realized.** For each of the 8 entry points, a check exists for each of {in-bounds, on-edge, out-of-range, NaN-input} against the synthetic table, and at least the node-identity / boundary / NaN cells additionally against the named production table.
+2. **Every row × every regime is realized.** For each of the 9 entry points, a check exists for each of {in-bounds, on-edge, out-of-range, NaN-input} against the synthetic table, and at least the node-identity / boundary / NaN cells additionally against the named production table.
 3. **Pass/fail is real.** Deliberately perturbing an expected value (e.g. injecting a 10× error into one corner) makes the corresponding cell **fail** the suite (proving the assertion is thresholded, not print-only).
 4. **No-Fortran-at-test-time.** The full suite builds and runs with only a C++ toolchain + AMReX (CPU/double); no Fortran or Matlab toolchain is invoked. Verified by building/running in this environment.
 5. **The MPI run is realized and gating.** In the MPI-enabled build the full suite passes under the MPI launcher at 2 and at 4 ranks, both rank-consistency cells run, and a deliberate mismatch on one rank (e.g. corrupting one rank's copy of a loaded array before the consistency check) fails the suite — proving the cross-rank comparison is real, not per-rank-only.

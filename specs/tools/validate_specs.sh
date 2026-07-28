@@ -149,6 +149,9 @@ SPEC_REQUIRE_IN_SPEC=(
   "eos-inversion.md|||ComputeTemperatureWith_DXY_NoGuess"
   "eos-inversion.md|||1e-10"
   "eos-inversion.md|||wlEOSInversionModule.F90"
+  "eos-inversion.md|||InitializeEOSInversion"
+  "eos-interpolation.md|||LogInterpolateSingleVariable_2D_Custom_Point"
+  "regression-suite-design.md|||InitializeEOSInversion"
   "table-format-and-io.md|||H5T_NATIVE_DOUBLE"
   "table-format-and-io.md|||column-major"
   "table-format-and-io.md|||EmAb_CorrectedAbsorption"
@@ -433,6 +436,8 @@ COVERAGE_ENTRY_POINTS=(
   "LogInterpolateSingleVariable_4D_Custom_Point"               # opacity-emab-iso: EmAb (+ Iso via 4D kernel)
   "LogInterpolateSingleVariable_2D2D_Custom_Aligned"           # opacity-nes-pair: NES + Pair
   "SumLogInterpolateSingleVariable_2D2D_Custom_Aligned"        # opacity-brem: Brem
+  "LogInterpolateSingleVariable_2D_Custom_Point"               # eos-interpolation: general 2D evaluate (inversion face eval, kernel resampling)
+  "InitializeEOSInversion"                                     # eos-inversion: bounds derivation/arming
 )
 
 check_coverage_matrix_closure() {

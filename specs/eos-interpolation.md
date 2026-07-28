@@ -9,6 +9,7 @@ This spec defines the device-callable, single-point interpolation of one EOS dep
 In scope:
 - The single-point evaluate contract: `(ρ, T, Yₑ) → value` for one dependent variable.
 - The single-point evaluate-and-differentiate contract: `(ρ, T, Yₑ) → value, (∂value/∂ρ, ∂value/∂T, ∂value/∂Yₑ)`.
+- The general-purpose single-point 2D evaluate contract (`_2D_Custom_Point`): `(x₁, x₂) → value` for one log-stored variable over two caller-pre-transformed axes — the form EOS inversion uses for its fixed-`T`-node `(ρ, Yₑ)` face evaluation and that consumers (e.g. thornado's `OpacityModule_TABLE`) use to resample opacity kernels onto their own energy nodes.
 - Units, valid ranges, the log/linear axis split, the offset recovery, column-major table indexing.
 - Boundary/out-of-range/NaN behavior (bit-for-bit with weaklib).
 - The self-contained closed-form checks and the `1e-10` derivative relaxation with rationale.
@@ -26,6 +27,7 @@ Pinned weaklib commit: see `weaklib_commit` in `specs/fixtures/tables.provenance
 - `weaklib/Distributions/Library/wlInterpolationModule.F90` — the named generator-of-record `_Point` routines:
   - `LogInterpolateSingleVariable_3D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1640-1707`) — the single-point evaluate workhorse. Signature `( D, T, Y, Ds, Ts, Ys, OS, Table, Interpolant )`: scalar query `(D,T,Y)`, axis arrays `Ds`/`Ts`/`Ys`, additive offset `OS`, log-stored `Table(iD,iT,iY)`, scalar `Interpolant` out. It clamps the log/log/linear bracket indices, computes unclamped deltas, reads the 8 corners, evaluates the trilinear sum in log space, and returns `10**(...) - OS`.
   - `LogInterpolateDifferentiateSingleVariable_3D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1814-1844`) — the matched evaluate-and-differentiate routine. Signature `( D, T, Y, Ds, Ts, Ys, OS, Table, Interpolant, Derivative )` with `Derivative(1:3)` = `(∂/∂ρ, ∂/∂T, ∂/∂Yₑ)`; it uses `GetIndexAndDelta_Log`/`_Lin` plus the per-axis chain-rule scale factors `aD`/`aT`/`aY` and `LinearInterpDeriv3D_3DArray_Point`.
+  - `LogInterpolateSingleVariable_2D_Custom_Point` (subroutine at `wlInterpolationModule.F90:1115-1165`) — the general single-point 2D evaluate. Signature `( X, Y, Xs, Ys, OS, Table, Interpolant )`: the query coordinates and axis arrays arrive **already in interpolation space** (the routine takes no logs of its inputs); it locates each bracket with the equidistant-grid formula (not a search), computes unclamped deltas, evaluates the bilinear form on the 4 stored corners, and recovers `10**(...) - OS`. Its host array form `LogInterpolateSingleVariable_2D_Custom` is the loop wrapper immediately above it in the same file. There is no matched 2D differentiate routine in weaklib.
 - `weaklib/Distributions/Library/wlInterpolationUtilitiesModule.F90` — the shared primitives these call: `GetIndexAndDelta_Log` / `GetIndexAndDelta_Lin`, the `TriLinear` basis and its partials `dTriLineardX1/2/3`, and the leaf routines `LinearInterp3D_3DArray_Point` / `LinearInterpDeriv3D_3DArray_Point` that own the `10**(...) - OS` recovery and the `(value+OS)·a·∂/∂d` derivative assembly.
 
 These `_Point` routines are the authoritative oracle that defines "correct" for this leaf (see `fortran-parity-and-tolerances.md`).
@@ -51,6 +53,10 @@ This `(ρ, T, Yₑ)` order, these units, and the `LogInterp = [1, 1, 0]` log/log
 - `Ds(1:nD)`, `Ts(1:nT)`, `Ys(1:nY)` — the strictly monotone-ascending grid-node coordinates for ρ, T, Yₑ (raw physical values, not pre-`LOG10`'d; this routine takes the log internally).
 - `OS` — the scalar additive offset for the chosen dependent variable.
 - `Table` — the log-stored values `log10(physical + OS)` over the 3D grid, indexed `(iD, iT, iY)` in Fortran column-major order: as a flat `double const*` the element `Table(iD,iT,iY)` (0-based) is `table[ iD + nD*( iT + nT*iY ) ]` (see `amrex-device-interface.md`).
+
+### The 2D `_Custom_Point` form (caller-pre-transformed coordinates)
+
+The 2D form is deliberately more primitive than the 3D form: it performs no log transform of its inputs. The caller supplies the query `(x₁, x₂)` and the two strictly monotone-ascending axis arrays already in the space the interpolation is linear in — EOS inversion passes `log10 ρ` against `log10`'d density nodes and `Yₑ` against `Ys`; a kernel-resampling consumer passes `log10 E` against a log-energy axis. `OS` and the log-stored `Table(i₁, i₂)` (Fortran column-major, `i₁` fastest-varying: flat offset `i₁ + n₁·i₂`) follow the same conventions as the 3D form, and the output is the same recovered physical `Interpolant`.
 
 ### Outputs
 
@@ -91,12 +97,30 @@ with per-axis scale factors `a_D = 1/( D · log10(Ds(iD+1)/Ds(iD)) )`, `a_T = 1/
 
 **Rationale for the `1e-10` derivative relaxation:** the derivative is a product of the reconstituted exponential `(value+OS)`, a transcendental scale factor (`log10` of a node ratio), and a finite-difference of the trilinear form — an interpolation-of-an-interpolation whose order-of-operations and transcendental rounding accumulate beyond the `1e-12` single-value tier. `1e-10` bounds that accumulation while still catching real regressions; the single recovered value itself stays at the default `1e-12` tier.
 
+### The 2D formula (equidistant bracket locator — pinned)
+
+For a 2D query `(x₁, x₂)` with axes already in interpolation space, each axis locates its bracket with weaklib's equidistant-grid formula — **not** a bracketing search (1-based, per axis of length `n`):
+
+```
+i = MAX( 1, MIN( n-1, 1 + FLOOR( (n-1) · (x − Xs(1)) / (Xs(n) − Xs(1)) ) ) )
+d = ( x − Xs(i) ) / ( Xs(i+1) − Xs(i) )
+```
+
+then, with the 4 corner log-values `p_ab = Table(i₁+a, i₂+b)` for `a,b ∈ {0,1}`:
+
+```
+Interpolant = 10**( bilinear(p00, p10, p01, p11, d₁, d₂) ) - OS
+```
+
+The result must match `LogInterpolateSingleVariable_2D_Custom_Point` on identical inputs at the default parity tier (`rtol 1e-12`, `atol 1e-30`). **The locator is part of the contract:** on an exactly uniform axis the equidistant formula and a bracket search agree; on a non-uniform axis they can pick different cells (the delta then falls outside `[0, 1]` and the evaluation extrapolates from the picked cell). Replicate the formula bit-for-bit — do not "fix" it with a search. (In practice callers pass axes uniform in interpolation space: `log10` of geometric energy/density grids, linear Yₑ.)
+
 ### Boundary / out-of-range / NaN (bit-for-bit with weaklib)
 
 Replicate the permissive behavior exactly (see `fortran-parity-and-tolerances.md`):
 
 - Out-of-range `(ρ, T, Yₑ)`: clamp the bracket index to the edge cell `[1, n-1]`, do **not** clamp the delta. A below-range query gives `d < 0`, above-range gives `d > 1`, producing **linear extrapolation from the edge cell** — not an error, not a result clamp, not a NaN. No range check; range enforcement is a consumer responsibility.
 - Non-positive `ρ` or `T` (or any non-positive node): `log10` of a non-positive argument yields NaN, which propagates silently to `Interpolant`. The C++ result must be NaN in the same circumstances. Yₑ (linear axis) does not log, so a non-positive Yₑ extrapolates rather than NaNs.
+- The 2D form clamps and extrapolates the same way on both axes; because it takes no logs of its inputs, a NaN `Interpolant` arises only from NaN inputs — a NaN coordinate must yield a NaN result while reading only in-range table entries (see Open questions).
 
 ### Conventions restated (the subset this leaf uses)
 
@@ -116,10 +140,13 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 3. **Derivative chain-rule scale factors (relaxed tier `1e-10`).** On the affine-in-log table the analytic derivatives have a closed form; the returned `Derivative(1:3)` must match it. Cross-check against a tight central finite-difference at the relaxed tier on the real table.
 4. **Boundary extrapolation (no tolerance / exact relation).** A query just outside an edge must equal the edge cell's linear extrapolation (compare against the same trilinear formula evaluated with the unclamped delta) — confirming clamp-index-but-not-delta.
 5. **NaN propagation (NaN-equality).** A query with non-positive ρ or T must produce a NaN `Interpolant`.
+6. **2D affine exactness + node identity (machine-precision tier `~1e-14`).** On a synthetic 2D table whose stored value is exactly affine in the two supplied coordinates, the bilinear form reproduces `10**(affine) - OS` at any interior query, and node identity holds at every node.
+7. **2D equidistant-locator pinning (exact).** On a deliberately non-uniform axis, the interpolant must equal the bilinear evaluation from the cell the equidistant formula picks (which can differ from the true containing cell) — pinning the locator itself, not just the value on uniform grids.
+8. **2D boundary / NaN (exact / NaN-equality).** Out-of-range 2D queries extrapolate from the clamped edge cell with unclamped delta; a NaN coordinate yields a NaN `Interpolant` with no out-of-range table access.
 
 ### Mechanical (validator)
 
-`bash specs/tools/validate_specs.sh` (default mode) asserts: the 7 mandated sections in order; both `_Point` routine names present; the `1e-10` relaxation present; the cited weaklib source-of-truth paths resolve; and the documented `/ThermoState/Density` and `/DependentVariables/Pressure` structures appear in the committed `wl-EOS-SFHo-15-25-50.h5ls` snapshot with the table named in this spec.
+`bash specs/tools/validate_specs.sh` (default mode) asserts: the 7 mandated sections in order; the three `_Point` routine names (3D evaluate, 3D differentiate, 2D evaluate) present; the `1e-10` relaxation present; the cited weaklib source-of-truth paths resolve; and the documented `/ThermoState/Density` and `/DependentVariables/Pressure` structures appear in the committed `wl-EOS-SFHo-15-25-50.h5ls` snapshot with the table named in this spec.
 
 ## Implementation freedom
 
@@ -127,9 +154,11 @@ Run against both synthetic in-suite tables and the real reference table `wl-EOS-
 - Whether evaluate and evaluate-and-differentiate share code or are separate.
 - The exact `_Point` signature argument grouping (subject to the scalar/allocation-free/`double const*`-plus-extents contract in `amrex-device-interface.md`).
 - Whether the multi-point array form is a hand-written loop or a `ParallelFor` over the `_Point` core.
+- Whether the 2D form shares the bilinear core with the 3D path or inlines it, and how the equidistant locator is expressed — provided the picked cell matches the formula for every input, including out-of-range.
 - Any caching/precomputation of node ratios, provided results meet the stated tolerances.
 
 ## Open questions / assumptions
 
 - **Concrete per-variable offsets (assumption, non-blocking).** The 15 `Offsets` values for this table live only in `/DependentVariables/Offsets` of the `.h5` file. This spec pins the recovery contract; the table supplies the numbers. The self-contained exactness checks use synthetic tables whose offsets the suite chooses, so they do not depend on the unknown production offsets.
+- **NaN-coordinate index behavior in the 2D form (assumption, non-blocking).** Fortran `FLOOR` of NaN is processor-dependent and a C++ float→int conversion of NaN is undefined; weaklib's `MAX/MIN` clamp keeps the index in-range for every real input. The pinned observable contract is only: a NaN coordinate produces a NaN `Interpolant` via the NaN delta, with all corner reads in-range (no undefined behavior); *which* in-range cell is read on the NaN path is unspecified.
 - **Dependent-variable index assignment (assumption, non-blocking).** The mapping of variable slot → physical quantity (e.g. Pressure, Entropy, …) is authoritative via the `/DependentVariables/i*` datasets and the `Names` ordering in the file, not hard-coded here. This spec's contract is per-variable (one `OS` + one log-stored sub-table); which slot is which is read from the table per `table-format-and-io.md`.
