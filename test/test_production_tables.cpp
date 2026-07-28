@@ -436,6 +436,66 @@ void run_iso(const std::string& path) {
   check(wli::is_close(got, want, wli::rtol_machine),
         "Iso node identity at an interior grid node");
 
+  // Moment-slice independence on the PRODUCTION layout (spec:118,:144). The
+  // synthetic sibling (test_iso_point.cpp:160-185) can also assert "each iMom
+  // recovers its own known affine function"; a real table has no spec-pinned
+  // oracle (spec:164), so what survives here is the other half: two DISTINCT
+  // moment indices evaluated at the SAME physical point must give different
+  // results. Each moment gets its OWN 2D offset element (the file-level OS is
+  // bound to the pinned iMom and must not be reused) — so this guards a
+  // transposed/blended (species, moment) offset select and a moment axis that
+  // is ignored or mis-strided in the 5D index arithmetic.
+  //
+  // Vacuity guard first: the pair is only contrastable if the data behind the
+  // two slices differs. Compare the RAW stored node values (no interpolation
+  // arithmetic, so exact != on stored doubles is the right test) and the two
+  // offsets; a pair is usable if either differs. Prefer the widest pair
+  // (0, nMom-1) — the only pair when nMom == 2, as in the pinned table — and
+  // otherwise scan a<b for the first usable one. Never assert on a vacuous
+  // pair.
+  if (nMom >= 2) {
+    auto raw_at = [&](int m) {
+      return tbl[wli::flat_index<5>({iE, m, iD, iT, iY},
+                                    {nE, nMom, nD, nT, nY})];
+    };
+    auto os_at = [&](int m) {
+      return wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments, iSpecies,
+                            m);
+    };
+    auto usable = [&](int a, int b) {
+      return raw_at(a) != raw_at(b) || os_at(a) != os_at(b);
+    };
+    int mA = -1, mB = -1;
+    if (usable(0, nMom - 1)) {
+      mA = 0;
+      mB = nMom - 1;
+    } else {
+      for (int a = 0; a < nMom - 1 && mA < 0; ++a)
+        for (int b = a + 1; b < nMom; ++b)
+          if (usable(a, b)) {
+            mA = a;
+            mB = b;
+            break;
+          }
+    }
+    check(mA >= 0,
+          "Iso moment slices: a distinguishable moment pair exists at the "
+          "interior node (raw node values or 2D offsets differ)");
+    if (mA >= 0) {
+      const Real OSa = os_at(mA), OSb = os_at(mB);
+      Real gA = wli::IsoInterpolateSingleVariable5DPoint(
+          LogEs[iE], LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, mA, nMom, OSa, tbl);
+      Real gB = wli::IsoInterpolateSingleVariable5DPoint(
+          LogEs[iE], LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, mB, nMom, OSb, tbl);
+      check(gA != gB,
+            "Iso moment-slice independence: two distinct iMom at the same "
+            "point give different values (guards a blended/ignored moment "
+            "slice or a transposed 2D offset element)");
+    }
+  }
+
   // Boundary: quarter-cell outside each axis edge extrapolates to a finite
   // value (clamp index, unclamped delta; spec:120-126, exact tier).
   Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
