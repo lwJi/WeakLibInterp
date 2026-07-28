@@ -13,10 +13,10 @@ Current state: mature and functionally spec-complete. All 13 research slices thi
 
 ## Tier 11 — Real-table verification coverage
 
-- [ ] Real-table boundary-extrapolation cells for EmAb and Iso
+- [x] Real-table boundary-extrapolation cells for EmAb and Iso
   - spec: opacity-emab-iso.md (§:140 — all checks "run against both synthetic in-suite tables and the real reference tables"; boundary policy §:94-99 — clamp bracket index, unclamped delta ⇒ extrapolate, stay finite); tier per fortran-parity-and-tolerances.md:101,113-119 (exact/no-tolerance)
   - tests: extend `run_emab` (`test/test_production_tables.cpp:280-355`, currently has NO boundary cell) with below-min and above-max queries on each of E, rho, T, Ye (one axis perturbed at a time, others at interior nodes), asserting `std::isfinite` — no `is_close`, no tolerance — mirroring `test/test_emab_point.cpp:154-199`; extend `run_iso` (`:357-491`) the same way for rho, T, Ye (below-edge E already covered at `:394-399`), mirroring `test/test_iso_point.cpp:187-227`. Cells stay `WL_TABLES_ROOT`-gated (SKIP 77); verify with the `--tables` run before committing.
-  - notes: Low risk — the clamp logic is the shared, dataset-independent `GetIndexAndDeltaLog/Lin` (`src/core/wli_interp.H:70-87`); this is coverage completeness, not a suspected bug.
+  - notes: DONE 2026-07-28. `run_emab` gained 8 checks ({below,above}×{E,rho,T,Ye}) and `run_iso`'s below-E cell was extended to the full 8 — quarter-cell probes in log space (raw for Ye), bare `std::isfinite`, exact tier; the correct spec anchor is opacity-emab-iso.md:120-126 (the §:94-99 refs above had drifted). Verified with `tools/test.sh --tables …` — 89/89 passed incl. `production_tables_np2/np4`, all 16 new `ok:` lines printed; default suite unchanged (SKIP 77 without tables). Iso cells use the pinned `iMom`/`OS`/`tbl` scope, not the FD block's `cM`/`OSfd`.
 
 - [ ] Real-table moment-slice independence for Iso
   - spec: opacity-emab-iso.md (§:140 real-table requirement; §:144 moment-slice independence; §:90-91 `IsoOffset` 2D species-major/moment-minor offsets — implementation `src/opacity/wli_opacity_emab_iso.H:229-232`)

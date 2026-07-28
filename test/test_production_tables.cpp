@@ -305,6 +305,51 @@ void run_emab(const std::string& path) {
   check(wli::is_close(got, want, wli::rtol_machine),
         "EmAb node identity at an interior grid node");
 
+  // Boundary: quarter-cell outside each axis edge extrapolates to a finite
+  // value (clamp index, unclamped delta; spec:120-126, exact tier).
+  {
+    Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
+    Real Ehi = LogEs[nE - 1] + Real(0.25) * (LogEs[nE - 1] - LogEs[nE - 2]);
+    Real Dlo = LogDs[0] - Real(0.25) * (LogDs[1] - LogDs[0]);
+    Real Dhi = LogDs[nD - 1] + Real(0.25) * (LogDs[nD - 1] - LogDs[nD - 2]);
+    Real Tlo = LogTs[0] - Real(0.25) * (LogTs[1] - LogTs[0]);
+    Real Thi = LogTs[nT - 1] + Real(0.25) * (LogTs[nT - 1] - LogTs[nT - 2]);
+    Real Ylo = Ys[0] - Real(0.25) * (Ys[1] - Ys[0]);
+    Real Yhi = Ys[nY - 1] + Real(0.25) * (Ys[nY - 1] - Ys[nY - 2]);
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              Elo, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge E extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              Ehi, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge E extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], Dlo, LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge rho extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], Dhi, LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge rho extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], Tlo, Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge T extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], Thi, Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge T extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], LogTs[iT], Ylo, LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge Ye extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], LogTs[iT], Yhi, LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge Ye extrapolates to a finite value");
+  }
+
   // NaN propagation: a literal NaN Log argument (the opacity convention).
   check(std::isnan(wli::EmAbInterpolateSingleVariable4DPoint(
             std::nan(""), LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
@@ -391,12 +436,50 @@ void run_iso(const std::string& path) {
   check(wli::is_close(got, want, wli::rtol_machine),
         "Iso node identity at an interior grid node");
 
-  // Boundary: a quarter-cell below the E edge extrapolates to a finite value.
+  // Boundary: quarter-cell outside each axis edge extrapolates to a finite
+  // value (clamp index, unclamped delta; spec:120-126, exact tier).
   Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
+  Real Ehi = LogEs[nE - 1] + Real(0.25) * (LogEs[nE - 1] - LogEs[nE - 2]);
+  Real Dlo = LogDs[0] - Real(0.25) * (LogDs[1] - LogDs[0]);
+  Real Dhi = LogDs[nD - 1] + Real(0.25) * (LogDs[nD - 1] - LogDs[nD - 2]);
+  Real Tlo = LogTs[0] - Real(0.25) * (LogTs[1] - LogTs[0]);
+  Real Thi = LogTs[nT - 1] + Real(0.25) * (LogTs[nT - 1] - LogTs[nT - 2]);
+  Real Ylo = Ys[0] - Real(0.25) * (Ys[1] - Ys[0]);
+  Real Yhi = Ys[nY - 1] + Real(0.25) * (Ys[nY - 1] - Ys[nY - 2]);
   check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
             Elo, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
             nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
         "Iso below-edge E extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            Ehi, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge E extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], Dlo, LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso below-edge rho extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], Dhi, LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge rho extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], Tlo, Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso below-edge T extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], Thi, Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge T extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], LogTs[iT], Ylo, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl)),
+        "Iso below-edge Ye extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], LogTs[iT], Yhi, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl)),
+        "Iso above-edge Ye extrapolates to a finite value");
 
   // NaN propagation on a NaN LogE argument (E/rho/T only, never Ye).
   check(std::isnan(wli::IsoInterpolateSingleVariable5DPoint(
