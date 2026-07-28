@@ -550,7 +550,7 @@ void run_nespair(const std::string& path, bool nes) {
         tag + " NaN propagation on a NaN LogT argument");
 
   // FD cross-check: BOTH (T, eta) are LOG axes — perturb the PHYSICAL coordinate
-  // and recompute the log (T in MeV, eta the physical degeneracy). Query at the
+  // and recompute the log (T in K per /ThermoState/Units, eta the physical degeneracy). Query at the
   // center of the first interior (T, eta) cell inside the FD-conditioning slope
   // window (see kFdSlopeMin/Max above), scanning the discrete (kernel, E', E)
   // indices too — the mid-table NES cell recovers a value ~11 orders below the

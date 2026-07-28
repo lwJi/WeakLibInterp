@@ -161,7 +161,7 @@ SPEC_REQUIRE_IN_SPEC=(
   "opacity-emab-iso.md|||wlInterpolationModule.F90"
   "opacity-emab-iso.md|||wlOpacityFieldsModule.f90"
   "opacity-nes-pair.md|||LogInterpolateSingleVariable_2D2D_Custom_Aligned"
-  "opacity-nes-pair.md|||exp((E − E') / T)"
+  "opacity-nes-pair.md|||exp((E − E') / (k_B·T))"
   "opacity-nes-pair.md|||crossing symmetry"
   "opacity-nes-pair.md|||detailed balance"
   "opacity-nes-pair.md|||wlInterpolationModule.F90"
