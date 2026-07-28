@@ -40,7 +40,8 @@ namespace wli {
 //   weaklib/.../wlInterpolationModule.F90:1455-1485.
 //
 // CRITICAL axis convention (spec:80-86): both LogT and LogX arrive ALREADY
-// LOG10'd by the caller (LogT = LOG10(T) with T in MeV for these channels;
+// LOG10'd by the caller (LogT = LOG10(T) with T in the table's tabulated unit,
+// Kelvin — same as the EOS channels, spec:84;
 // LogX = LOG10(eta)) and are located against the already-LOG10'd grids
 // LogTs / LogXs with the LINEAR bracket/delta (wli::GetIndexAndDeltaLin) — this
 // kernel NEVER calls log10 itself. Non-positive T or eta means the caller's
@@ -171,8 +172,11 @@ NESPairPointDeriv NESPairInterpolateDifferentiateSingleVariable2D2DAlignedPoint(
 // SWAPPED — the primitive's first two energy args are (iEp, iE), so passing
 // (iE, iEp) here reads Phi(iE, iEp) — then multiplies by exp((E[iE]-E[iEp])/T).
 //
-// CRITICAL units/plumbing (spec:80-86, :227): E[] and T are PHYSICAL (MeV),
+// CRITICAL units/plumbing (spec:80-86, :150-156, :227): E[] and T are PHYSICAL,
 // NOT log-space — distinct from LogT/LogTs, which the primitive alone consumes.
+// The T parameter is the temperature EXPRESSED IN THE SAME ENERGY UNIT AS E[]
+// (k_B*T, MeV, with k_B = 8.61733e-11 MeV/K for the Kelvin table temperature
+// that LogT is the log10 of), so the Boltzmann exponent is dimensionless.
 // This leaf never touches the log grids beyond forwarding them. Energies must be
 // strictly increasing with index, so for iEp > iE we have E[iE] < E[iEp] and the
 // factor is < 1 (the upper triangle is Boltzmann-suppressed). Subtracting in the
@@ -194,7 +198,8 @@ Real NESDetailedBalanceFillPoint(
   Real const lower = NESPairInterpolateSingleVariable2D2DAlignedPoint(
       LogT, LogX, LogTs, nT, LogXs, nEta, iE, iEp, nEp, nE, kernel, nMom, OS,
       table);
-  // Boltzmann factor exp((E(iE) - E(iEp)) / T): physical energies + T in MeV.
+  // Boltzmann factor exp((E(iE) - E(iEp)) / T): physical energies (MeV) + T
+  // already in energy units (k_B*T of the Kelvin table temperature).
   return lower * std::exp((E[iE] - E[iEp]) / T);
 }
 
@@ -282,8 +287,10 @@ inline void NESPairInterpolateDifferentiateSingleVariable2D2DAligned(
   });
 }
 
-// Array NES detailed-balance fill over NESDetailedBalanceFillPoint. E[] and T are
-// PHYSICAL (MeV), batch-shared; only LogT[p]/LogX[p] vary per point.
+// Array NES detailed-balance fill over NESDetailedBalanceFillPoint. E[] and T
+// are PHYSICAL and batch-shared (E in MeV; T in the same energy unit as E[],
+// i.e. k_B*T of the Kelvin table temperature); only LogT[p]/LogX[p] vary per
+// point.
 inline void NESDetailedBalanceFill(
     int npoints, Real const* LogT, Real const* LogX, Real const* LogTs,
     Real const* LogXs, int iEp, int iE, int kernel, Real OS,

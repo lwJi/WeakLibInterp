@@ -57,7 +57,7 @@ The query is the same 4-tuple as `opacity-emab-iso.md` — `E`, `ρ`, `T` arrive
 
 ### NES/Pair (2D-aligned) evaluate-and-differentiate
 
-At fixed energy indices `(iE', iE)` and fixed `kernel`, the two interpolated coordinates are the thermodynamic pair `(T, η)`, both **pre-`LOG10`'d** (`LogT`, `LogX = LOG10(η)`) on the LOG10'd grids `LogTs, LogXs`, with `T` in **MeV** (per `opacity-nes-pair.md`). Outputs:
+At fixed energy indices `(iE', iE)` and fixed `kernel`, the two interpolated coordinates are the thermodynamic pair `(T, η)`, both **pre-`LOG10`'d** (`LogT`, `LogX = LOG10(η)`) on the LOG10'd grids `LogTs, LogXs`, with `T` in **Kelvin** (the table's tabulated unit; per `opacity-nes-pair.md`). Outputs:
 
 - `Interpolant` — the recovered physical kernel value (identical to the value-only aligned leaf, on the lower energy triangle `iE' ≤ iE`).
 - `DerivativeT = ∂value/∂T`, `DerivativeX = ∂value/∂η`.

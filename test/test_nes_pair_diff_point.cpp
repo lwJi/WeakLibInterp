@@ -80,7 +80,7 @@ int main() {
   // --- Synthetic 5D grid: non-uniform (uneven-ratio) LOG10'd T and eta axes. ---
   const int nEp = 4, nE = 4, nMom = 3, nT = 3, nEta = 4;
   const int nOpacities = 1;  // pinned NES/Pair tables have nOpacities = 1
-  Real LogTs[nT] = {-0.4, 0.15, 0.9};         // log10 T (T in MeV)
+  Real LogTs[nT] = {-0.4, 0.15, 0.9};         // log10 T (T in table units, K)
   Real LogXs[nEta] = {-1.0, -0.3, 0.5, 1.4};  // log10 eta
 
   // 5D table, column-major (nEp, nE, nMom, nT, nEta): E' fastest.

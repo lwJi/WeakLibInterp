@@ -371,7 +371,7 @@ int main() {
   // 5D table (nEp, nE, nMom, nT, nEta). Energy/kernel indices used directly.
   // =========================================================================
   const int nEp = 3, nEe = 3, nMomK = 4, nTk = 3, nEta = 3;
-  Real LogTk[nTk] = {-0.3, 0.4, 1.0};   // log10 T (MeV)
+  Real LogTk[nTk] = {-0.3, 0.4, 1.0};   // log10 T (table units, K)
   Real LogXk[nEta] = {-1.0, 0.0, 1.2};  // log10 eta
   auto npBias = [&](int iEp, int iE, int k) {
     return 0.13 * iEp + 0.07 * iE + 0.05 * k;
@@ -438,7 +438,7 @@ int main() {
   // Boltzmann factor exp((E[iE]-E[iEp])/T).
   {
     Real E[nEe] = {2.0, 5.0, 9.0};  // strictly increasing PHYSICAL energies
-    Real Tphys = 3.5;               // physical T (MeV)
+    Real Tphys = 3.5;               // T in energy units (k_B*T), MeV
     Real lt = 0.1, lx = 0.3;
     int iEp = 2, iE = 1, k = 1;  // upper triangle (iEp > iE)
     Real got = wli::NESDetailedBalanceFillPoint(lt, lx, LogTk, nTk, LogXk, nEta,

@@ -29,6 +29,8 @@ The authoritative behavior is the weaklib Fortran source at the pinned commit re
 
 The authoritative oracle that defines "correct" is the matched `_Point` (single-query, scalar, allocation-free) routine for each leaf, named in that leaf's "Source of truth" section.
 
+**Interpretation-conflict precedence (restated from `README.md`, which is canonical): table data > thornado usage > weaklib library.** The oracle defines correct *numerics*; when sources disagree on *interpretation* — units, dataset meaning, offset conventions, axis semantics, which code paths are live — trust first the pinned production tables themselves (on-disk contents including `Units`/`Unit` datasets, per `specs/fixtures/tables.provenance` and the `fixtures/*.h5ls` snapshots), then thornado's production call sites, and only last the weaklib library's own comments/docs/standalone wrappers, which can drift or be dead paths. Resolved conflicts are logged in the affected leaf's "Open questions / assumptions" section.
+
 ## Inputs & outputs
 
 This spec does not define a callable surface; it defines conventions the leaf surfaces obey.

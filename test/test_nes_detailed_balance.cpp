@@ -7,8 +7,9 @@
 //     Phi(iEp, iE) = Phi(iE, iEp) * exp( ( E(iE) - E(iEp) ) / T )   for iEp > iE
 // The upper energy triangle (iEp > iE) is FILLED from the symmetric lower-
 // triangle value (read by the aligned primitive at SWAPPED energy indices) times
-// the Boltzmann factor exp((E(iE)-E(iEp))/T). E and T are PHYSICAL (MeV), NOT
-// log-space — distinct plumbing from the primitive's LogT/LogTs.
+// the Boltzmann factor exp((E(iE)-E(iEp))/T). E is in MeV; T is in the same
+// energy unit (k_B*T of the Kelvin table temperature), NOT log-space —
+// distinct plumbing from the primitive's LogT/LogTs.
 //
 // Required checks (default parity tier 1e-12/1e-30, spec:156, :203):
 //   1. Fill equals lower-triangle value * exp((E[iE]-E[iEp])/T) for iEp > iE.
@@ -60,7 +61,7 @@ int main() {
   // --- Synthetic 5D grid (same geometry as the sibling primitive test). ---
   const int nEp = 4, nE = 4, nMom = 3, nT = 3, nEta = 4;
   const int nOpacities = 1;  // pinned NES tables have nOpacities = 1
-  Real LogTs[nT] = {-0.4, 0.15, 0.9};          // log10 T (T in MeV)
+  Real LogTs[nT] = {-0.4, 0.15, 0.9};          // log10 T (T in table units, K)
   Real LogXs[nEta] = {-1.0, -0.3, 0.5, 1.4};   // log10 eta
 
   // 5D table, column-major (nEp, nE, nMom, nT, nEta): E' fastest.
@@ -88,7 +89,7 @@ int main() {
     return wli::IsoOffset(offsets, nOpacities, nMom, iSpecies, kernel);
   };
 
-  // Physical energy grid (MeV), STRICTLY increasing, and physical T (MeV),
+  // Physical energy grid (MeV), STRICTLY increasing, and T in energy units (k_B*T, MeV),
   // chosen so factors differ noticeably across pairs. E is 0-based (C++).
   Real E[nE] = {2.0, 8.0, 20.0, 45.0};
   const Real T = 5.0;
