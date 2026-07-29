@@ -64,15 +64,49 @@ echo "END MESSAGE"
 
 ################################################################################
 # Configure + build + install via this repo's CMake (spec:53-57).
+#
+# Each stage carries its own explicit diagnostic — the build half of "find-or-
+# build is never silent" (spec:69). `set -e` alone aborts without naming the
+# stage, the inputs that produced it, or the remedy; and it does NOT fire for a
+# command on the left of `||`, so every guard below ends in an explicit exit 1.
+# The BEGIN/END ERROR markers mirror detect.sh for human/log consistency only:
+# this script is run by make (make.code.deps), not by Cactus's
+# ConfigScriptParser.pl, so unlike detect.sh's markers they carry no protocol
+# meaning here.
 ################################################################################
 cmake -S "${WLI_REPO_ROOT}" -B "${WLI_BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DWLI_AMREX_INSTALL_DIR="${AMREX_DIR}" \
     -DWLI_BUILD_TESTS=OFF \
     -DWLI_GPU_BACKEND="${WLI_GPU_BACKEND}" \
-    -DCMAKE_INSTALL_PREFIX="${WLI_PREFIX}"
+    -DCMAKE_INSTALL_PREFIX="${WLI_PREFIX}" || {
+    echo "BEGIN ERROR"
+    echo "WeakLibInterp: could neither find nor build the library."
+    echo "Error: the nested CMake configure of this repository failed."
+    echo "  repository root: ${WLI_REPO_ROOT}"
+    echo "  AMReX install  : ${AMREX_DIR}"
+    echo "  GPU backend    : ${WLI_GPU_BACKEND}"
+    echo "  install prefix : ${WLI_PREFIX}"
+    echo "Scroll up for the CMake output: a backend or MPI mismatch against the"
+    echo "AMReX install above is named there by the configure-time guard."
+    echo "Fix the ET AMReX thorn's options, or point WEAKLIBINTERP_DIR at an"
+    echo "already-installed WeakLibInterp prefix instead of BUILD."
+    echo "END ERROR"
+    exit 1
+}
 
-cmake --build "${WLI_BUILD_DIR}" -j"${WLI_BUILD_JOBS}" --target install
+cmake --build "${WLI_BUILD_DIR}" -j"${WLI_BUILD_JOBS}" --target install || {
+    echo "BEGIN ERROR"
+    echo "WeakLibInterp: could neither find nor build the library."
+    echo "Error: the library build/install step failed after a successful configure."
+    echo "  build tree     : ${WLI_BUILD_DIR}"
+    echo "  install prefix : ${WLI_PREFIX}"
+    echo "Scroll up for the compiler/linker output. Re-run once it is fixed, or"
+    echo "point WEAKLIBINTERP_DIR at an already-installed WeakLibInterp prefix"
+    echo "instead of BUILD."
+    echo "END ERROR"
+    exit 1
+}
 
 echo "BEGIN MESSAGE"
 echo "WeakLibInterp built and installed into ${WLI_PREFIX}"
