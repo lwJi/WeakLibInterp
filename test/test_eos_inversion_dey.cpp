@@ -34,7 +34,8 @@
 
 #include "wli_compare.H"
 #include "wli_eos.H"            // forward EosInterpolateSingleVariable3DPoint
-#include "wli_eos_inversion.H"  // the routines under test
+#include "wli_eos_inversion.H"         // the routines under test
+#include "wli_eos_inversion_bounds.H"  // test-only bounds builders
 #include "wli_real.H"
 
 namespace {
@@ -95,22 +96,8 @@ int main() {
 
   // Bounds from the affine table: rho/Ye from the axes, X from the recovered
   // physical value extents.
-  wli::EosInversionBounds b;
-  b.MinD = Ds[0];
-  b.MaxD = Ds[nD - 1];
-  b.MinY = Ys[0];
-  b.MaxY = Ys[nY - 1];
-  {
-    Real lo = wli::recover(Es[0], kOS), hi = lo;
-    for (std::size_t k = 0; k < Es.size(); ++k) {
-      Real v = wli::recover(Es[k], kOS);
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    b.MinX = lo;
-    b.MaxX = hi;
-  }
-  b.initialized = true;
+  const wli::EosInversionBounds b =
+      wli::test::MakeBoundsFromTable(Ds, nD, Ys, nY, Esd, Es.size(), kOS);
 
   auto forward = [&](Real D, Real T, Real Y, const Real* tbl) {
     return wli::EosInterpolateSingleVariable3DPoint(D, T, Y, Ds, nD, Ts, nT, Ys,
@@ -241,22 +228,8 @@ int main() {
           Es2[idx(iD, iT, iY)] = nonaffine(Ds[iD], Ts[iT], Ys[iY]);
     const Real* Es2d = Es2.data();
 
-    wli::EosInversionBounds b2;
-    b2.MinD = Ds[0];
-    b2.MaxD = Ds[nD - 1];
-    b2.MinY = Ys[0];
-    b2.MaxY = Ys[nY - 1];
-    {
-      Real lo = wli::recover(Es2[0], kOS), hi = lo;
-      for (std::size_t k = 0; k < Es2.size(); ++k) {
-        Real v = wli::recover(Es2[k], kOS);
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
-      b2.MinX = lo;
-      b2.MaxX = hi;
-    }
-    b2.initialized = true;
+    const wli::EosInversionBounds b2 =
+        wli::test::MakeBoundsFromTable(Ds, nD, Ys, nY, Es2d, Es2.size(), kOS);
 
     // At (Ds[1], Ys[1]) the (log-stored) face values over Ts are
     // {1.126, 1.358, 1.126, 0.656, 0.226}: rise then fall (peak at node 1).
@@ -301,22 +274,8 @@ int main() {
               kA + kB * std::log10(Ds[iD]) + kE * Ys[iY];  // no kC*log10(T) term
     const Real* Esfd = Esf.data();
 
-    wli::EosInversionBounds bf;
-    bf.MinD = Ds[0];
-    bf.MaxD = Ds[nD - 1];
-    bf.MinY = Ys[0];
-    bf.MaxY = Ys[nY - 1];
-    {
-      Real lo = wli::recover(Esf[0], kOS), hi = lo;
-      for (std::size_t k = 0; k < Esf.size(); ++k) {
-        Real v = wli::recover(Esf[k], kOS);
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
-      bf.MinX = lo;
-      bf.MaxX = hi;
-    }
-    bf.initialized = true;
+    const wli::EosInversionBounds bf =
+        wli::test::MakeBoundsFromTable(Ds, nD, Ys, nY, Esfd, Esf.size(), kOS);
 
     Real D = 7.3e6, Y = 0.22;             // interior, off-node
     Real X0 = forward(D, 6.0, Y, Esfd);   // the flat column constant (any T)

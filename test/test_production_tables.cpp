@@ -30,6 +30,7 @@
 #include "wli_compare.H"
 #include "wli_eos.H"
 #include "wli_eos_inversion.H"
+#include "wli_eos_inversion_bounds.H"
 #include "wli_io_eos.H"
 #include "wli_io_opacity.H"
 #include "wli_opacity.H"
@@ -233,20 +234,10 @@ void run_eos(const std::string& path) {
     const Real* ftbl = fdv.values.data();
     const Real fOS = fdv.offset;
 
-    wli::EosInversionBounds b;
-    b.MinD = Ds[0];
-    b.MaxD = Ds[nD - 1];
-    b.MinY = Ys[0];
-    b.MaxY = Ys[nY - 1];
-    Real lo = wli::recover(ftbl[0], fOS), hi = lo;
-    for (std::size_t k = 0; k < fdv.values.size(); ++k) {
-      Real v = wli::recover(ftbl[k], fOS);
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    b.MinX = lo;
-    b.MaxX = hi;
-    b.initialized = true;  // else CheckInputError returns vacuous code 10
+    // MakeBoundsFromTable also sets initialized = true; else CheckInputError
+    // returns vacuous code 10.
+    const wli::EosInversionBounds b = wli::test::MakeBoundsFromTable(
+        Ds, nD, Ys, nY, ftbl, fdv.values.size(), fOS);
 
     const Real X = wli::EosInterpolateSingleVariable3DPoint(
         Dq, Tstar, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl);

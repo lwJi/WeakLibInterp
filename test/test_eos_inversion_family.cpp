@@ -31,7 +31,8 @@
 
 #include "wli_compare.H"
 #include "wli_eos.H"            // forward EosInterpolateSingleVariable3DPoint
-#include "wli_eos_inversion.H"  // the routines under test
+#include "wli_eos_inversion.H"         // the routines under test
+#include "wli_eos_inversion_bounds.H"  // test-only bounds builders
 #include "wli_real.H"
 
 namespace {
@@ -94,22 +95,8 @@ void run_family(const char* fam, NoGuessFn noguess, GuessFn guess,
         Xs[idx(iD, iT, iY)] = affine(Ds[iD], Ts[iT], Ys[iY]);
   const Real* Xsd = Xs.data();
 
-  wli::EosInversionBounds b;
-  b.MinD = Ds[0];
-  b.MaxD = Ds[nD - 1];
-  b.MinY = Ys[0];
-  b.MaxY = Ys[nY - 1];
-  {
-    Real lo = wli::recover(Xs[0], kOS), hi = lo;
-    for (std::size_t k = 0; k < Xs.size(); ++k) {
-      Real v = wli::recover(Xs[k], kOS);
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    b.MinX = lo;
-    b.MaxX = hi;
-  }
-  b.initialized = true;
+  const wli::EosInversionBounds b =
+      wli::test::MakeBoundsFromTable(Ds, nD, Ys, nY, Xsd, Xs.size(), kOS);
 
   auto forward = [&](Real D, Real T, Real Y, const Real* tbl) {
     return wli::EosInterpolateSingleVariable3DPoint(D, T, Y, Ds, nD, Ts, nT, Ys,
@@ -228,22 +215,8 @@ void run_family(const char* fam, NoGuessFn noguess, GuessFn guess,
           X2[idx(iD, iT, iY)] = nonaffine(Ds[iD], Ts[iT], Ys[iY]);
     const Real* X2d = X2.data();
 
-    wli::EosInversionBounds b2;
-    b2.MinD = Ds[0];
-    b2.MaxD = Ds[nD - 1];
-    b2.MinY = Ys[0];
-    b2.MaxY = Ys[nY - 1];
-    {
-      Real lo = wli::recover(X2[0], kOS), hi = lo;
-      for (std::size_t k = 0; k < X2.size(); ++k) {
-        Real v = wli::recover(X2[k], kOS);
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
-      b2.MinX = lo;
-      b2.MaxX = hi;
-    }
-    b2.initialized = true;
+    const wli::EosInversionBounds b2 =
+        wli::test::MakeBoundsFromTable(Ds, nD, Ys, nY, X2d, X2.size(), kOS);
 
     // At (Ds[1], Ys[1]) the face rises then falls (peak at node 1); target
     // affine 1.2 => a low-T root in (Ts[0],Ts[1]) and a high-T root in
