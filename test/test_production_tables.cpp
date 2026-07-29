@@ -30,6 +30,7 @@
 #include "wli_compare.H"
 #include "wli_eos.H"
 #include "wli_eos_inversion.H"
+#include "wli_eos_inversion_bounds.H"
 #include "wli_io_eos.H"
 #include "wli_io_opacity.H"
 #include "wli_opacity.H"
@@ -233,20 +234,10 @@ void run_eos(const std::string& path) {
     const Real* ftbl = fdv.values.data();
     const Real fOS = fdv.offset;
 
-    wli::EosInversionBounds b;
-    b.MinD = Ds[0];
-    b.MaxD = Ds[nD - 1];
-    b.MinY = Ys[0];
-    b.MaxY = Ys[nY - 1];
-    Real lo = wli::recover(ftbl[0], fOS), hi = lo;
-    for (std::size_t k = 0; k < fdv.values.size(); ++k) {
-      Real v = wli::recover(ftbl[k], fOS);
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    b.MinX = lo;
-    b.MaxX = hi;
-    b.initialized = true;  // else CheckInputError returns vacuous code 10
+    // MakeBoundsFromTable also sets initialized = true; else CheckInputError
+    // returns vacuous code 10.
+    const wli::EosInversionBounds b = wli::test::MakeBoundsFromTable(
+        Ds, nD, Ys, nY, ftbl, fdv.values.size(), fOS);
 
     const Real X = wli::EosInterpolateSingleVariable3DPoint(
         Dq, Tstar, Yq, Ds, nD, Ts, nT, Ys, nY, fOS, ftbl);
@@ -304,6 +295,51 @@ void run_emab(const std::string& path) {
       tbl[static_cast<std::size_t>(iE) + nE * (iD + nD * (iT + nT * iY))], OS);
   check(wli::is_close(got, want, wli::rtol_machine),
         "EmAb node identity at an interior grid node");
+
+  // Boundary: quarter-cell outside each axis edge extrapolates to a finite
+  // value (clamp index, unclamped delta; spec:120-126, exact tier).
+  {
+    Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
+    Real Ehi = LogEs[nE - 1] + Real(0.25) * (LogEs[nE - 1] - LogEs[nE - 2]);
+    Real Dlo = LogDs[0] - Real(0.25) * (LogDs[1] - LogDs[0]);
+    Real Dhi = LogDs[nD - 1] + Real(0.25) * (LogDs[nD - 1] - LogDs[nD - 2]);
+    Real Tlo = LogTs[0] - Real(0.25) * (LogTs[1] - LogTs[0]);
+    Real Thi = LogTs[nT - 1] + Real(0.25) * (LogTs[nT - 1] - LogTs[nT - 2]);
+    Real Ylo = Ys[0] - Real(0.25) * (Ys[1] - Ys[0]);
+    Real Yhi = Ys[nY - 1] + Real(0.25) * (Ys[nY - 1] - Ys[nY - 2]);
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              Elo, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge E extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              Ehi, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge E extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], Dlo, LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge rho extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], Dhi, LogTs[iT], Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge rho extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], Tlo, Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge T extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], Thi, Ys[iY], LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge T extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], LogTs[iT], Ylo, LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb below-edge Ye extrapolates to a finite value");
+    check(std::isfinite(wli::EmAbInterpolateSingleVariable4DPoint(
+              LogEs[iE], LogDs[iD], LogTs[iT], Yhi, LogEs.data(), nE,
+              LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, OS, tbl)),
+          "EmAb above-edge Ye extrapolates to a finite value");
+  }
 
   // NaN propagation: a literal NaN Log argument (the opacity convention).
   check(std::isnan(wli::EmAbInterpolateSingleVariable4DPoint(
@@ -391,12 +427,110 @@ void run_iso(const std::string& path) {
   check(wli::is_close(got, want, wli::rtol_machine),
         "Iso node identity at an interior grid node");
 
-  // Boundary: a quarter-cell below the E edge extrapolates to a finite value.
+  // Moment-slice independence on the PRODUCTION layout (spec:118,:144). The
+  // synthetic sibling (test_iso_point.cpp:160-185) can also assert "each iMom
+  // recovers its own known affine function"; a real table has no spec-pinned
+  // oracle (spec:164), so what survives here is the other half: two DISTINCT
+  // moment indices evaluated at the SAME physical point must give different
+  // results. Each moment gets its OWN 2D offset element (the file-level OS is
+  // bound to the pinned iMom and must not be reused) — so this guards a
+  // transposed/blended (species, moment) offset select and a moment axis that
+  // is ignored or mis-strided in the 5D index arithmetic.
+  //
+  // Vacuity guard first: the pair is only contrastable if the data behind the
+  // two slices differs. Compare the RAW stored node values (no interpolation
+  // arithmetic, so exact != on stored doubles is the right test) and the two
+  // offsets; a pair is usable if either differs. Prefer the widest pair
+  // (0, nMom-1) — the only pair when nMom == 2, as in the pinned table — and
+  // otherwise scan a<b for the first usable one. Never assert on a vacuous
+  // pair.
+  if (nMom >= 2) {
+    auto raw_at = [&](int m) {
+      return tbl[wli::flat_index<5>({iE, m, iD, iT, iY},
+                                    {nE, nMom, nD, nT, nY})];
+    };
+    auto os_at = [&](int m) {
+      return wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments, iSpecies,
+                            m);
+    };
+    auto usable = [&](int a, int b) {
+      return raw_at(a) != raw_at(b) || os_at(a) != os_at(b);
+    };
+    int mA = -1, mB = -1;
+    if (usable(0, nMom - 1)) {
+      mA = 0;
+      mB = nMom - 1;
+    } else {
+      for (int a = 0; a < nMom - 1 && mA < 0; ++a)
+        for (int b = a + 1; b < nMom; ++b)
+          if (usable(a, b)) {
+            mA = a;
+            mB = b;
+            break;
+          }
+    }
+    check(mA >= 0,
+          "Iso moment slices: a distinguishable moment pair exists at the "
+          "interior node (raw node values or 2D offsets differ)");
+    if (mA >= 0) {
+      const Real OSa = os_at(mA), OSb = os_at(mB);
+      Real gA = wli::IsoInterpolateSingleVariable5DPoint(
+          LogEs[iE], LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, mA, nMom, OSa, tbl);
+      Real gB = wli::IsoInterpolateSingleVariable5DPoint(
+          LogEs[iE], LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE,
+          LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, mB, nMom, OSb, tbl);
+      check(gA != gB,
+            "Iso moment-slice independence: two distinct iMom at the same "
+            "point give different values (guards a blended/ignored moment "
+            "slice or a transposed 2D offset element)");
+    }
+  }
+
+  // Boundary: quarter-cell outside each axis edge extrapolates to a finite
+  // value (clamp index, unclamped delta; spec:120-126, exact tier).
   Real Elo = LogEs[0] - Real(0.25) * (LogEs[1] - LogEs[0]);
+  Real Ehi = LogEs[nE - 1] + Real(0.25) * (LogEs[nE - 1] - LogEs[nE - 2]);
+  Real Dlo = LogDs[0] - Real(0.25) * (LogDs[1] - LogDs[0]);
+  Real Dhi = LogDs[nD - 1] + Real(0.25) * (LogDs[nD - 1] - LogDs[nD - 2]);
+  Real Tlo = LogTs[0] - Real(0.25) * (LogTs[1] - LogTs[0]);
+  Real Thi = LogTs[nT - 1] + Real(0.25) * (LogTs[nT - 1] - LogTs[nT - 2]);
+  Real Ylo = Ys[0] - Real(0.25) * (Ys[1] - Ys[0]);
+  Real Yhi = Ys[nY - 1] + Real(0.25) * (Ys[nY - 1] - Ys[nY - 2]);
   check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
             Elo, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
             nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
         "Iso below-edge E extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            Ehi, LogDs[iD], LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge E extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], Dlo, LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso below-edge rho extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], Dhi, LogTs[iT], Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge rho extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], Tlo, Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso below-edge T extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], Thi, Ys[iY], LogEs.data(), nE, LogDs.data(),
+            nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS, tbl)),
+        "Iso above-edge T extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], LogTs[iT], Ylo, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl)),
+        "Iso below-edge Ye extrapolates to a finite value");
+  check(std::isfinite(wli::IsoInterpolateSingleVariable5DPoint(
+            LogEs[iE], LogDs[iD], LogTs[iT], Yhi, LogEs.data(), nE,
+            LogDs.data(), nD, LogTs.data(), nT, Ys.data(), nY, iMom, nMom, OS,
+            tbl)),
+        "Iso above-edge Ye extrapolates to a finite value");
 
   // NaN propagation on a NaN LogE argument (E/rho/T only, never Ye).
   check(std::isnan(wli::IsoInterpolateSingleVariable5DPoint(
@@ -610,6 +744,212 @@ void run_nespair(const std::string& path, bool nes) {
             tag + " FD cross-check ∂value/∂T (1e-10)");
       check(wli::is_close(d.dDX, fdX, wli::rtol_relaxed, wli::atol_default),
             tag + " FD cross-check ∂value/∂eta (1e-10)");
+    }
+  }
+
+  // Upper-triangle symmetry-fill closure against the live table (spec:144-174,
+  // Verification #4-5). The aligned primitive above computes only the LOWER
+  // energy triangle (iEp <= iE); the UPPER triangle (iEp > iE) is not
+  // independently interpolated — it is FILLED by the channel's physics symmetry:
+  // detailed balance for NES, crossing symmetry for Pair. Both fill leaves
+  // COMPOSE that same primitive at SWAPPED energy indices, so the real-table
+  // oracle is the composition (a production table has no spec-pinned absolute
+  // value oracle); each cell first scans for a point where the composition is
+  // non-vacuous, exactly like the moment-slice / FD scans above.
+  {
+    auto os_at = [&](int k) {
+      return wli::IsoOffset(t.offset.data(), t.nOpacities, t.nMoments, iSpecies,
+                            k);
+    };
+    // The primitive at EXPLICIT energy indices (no swap performed here) at the
+    // same interior (T, eta) node the node-identity cell uses.
+    auto prim = [&](int a, int b, int k, Real OSk) {
+      return wli::NESPairInterpolateSingleVariable2D2DAlignedPoint(
+          LogTs[iT], LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, a, b, nEp,
+          nE, k, nMom, OSk, tbl);
+    };
+
+    // Both energy axes share the single /EnergyGrid, so one E[] indexes either
+    // of them. t.nPoints is FORTRAN-ordered (nEp, nE, nMom, nT, nEta), so nEp
+    // and nE are the two 40-point energy extents (NOT the reversed h5ls shape).
+    // Guard before E[] is indexed with either energy index.
+    const bool energyOk =
+        nEp == nE &&
+        nEp == static_cast<int>(t.common.energyGrid.points.size());
+    check(energyOk, tag + " energy extents: nEp == nE == /EnergyGrid size "
+                          "(one E[] indexes both energy axes)");
+
+    if (energyOk && nes) {
+      const Real* E = t.common.energyGrid.points.data();
+      // CRITICAL unit plumbing: NESDetailedBalanceFillPoint's T argument is the
+      // temperature in the SAME ENERGY UNIT as E[] — k_B*T in MeV
+      // (src/opacity/wli_opacity_nes_pair.H:175-179, spec:150-156) — while the
+      // table's own temperature axis is Kelvin (only ever log10'd into LogTs
+      // above) and /EnergyGrid is MeV. k_B is weaklib's pinned value (spec:156).
+      constexpr Real kBoltzmannMeVPerK = Real(8.61733e-11);
+      const Real TMeV = kBoltzmannMeVPerK * Real(t.common.axes[1].points[iT]);
+
+      // Boltzmann factor exp((E[iE]-E[iEp])/(k_B*T)); < 1 for iEp > iE.
+      auto factor = [&](int ep, int e) {
+        return std::exp((E[e] - E[ep]) / TMeV);
+      };
+      // Non-vacuity: the composition is only a real test where the swapped-index
+      // primitive is finite and big enough that the reciprocal-sign guard has
+      // room (|p| > 1e-20 keeps the reciprocal separation |p|*|f - 1/f| ~ 1e-26
+      // far above atol_default = 1e-30), and where the factor is finite, > 0
+      // (a 0 catches exponent underflow, an inf/NaN catches overflow) and
+      // measurably off 1 (else fill == primitive is a vacuous identity).
+      const Real kMinPrim = Real(1e-20), kMinFacOff = Real(1e-6);
+      auto usable = [&](int ep, int e, int k) {
+        const Real p = prim(e, ep, k, os_at(k));  // SWAPPED: Phi(iE, iEp)
+        const Real f = factor(ep, e);
+        return std::isfinite(p) && std::abs(p) > kMinPrim && std::isfinite(f) &&
+               f > Real(0) && std::abs(f - Real(1)) > kMinFacOff;
+      };
+      int sEp = -1, sE = -1, sK = -1;
+      {
+        // Prefer the smallest separation next to the pinned midpoint, then scan.
+        const int e0 = nE / 2, ep0 = nE / 2 + 1;
+        if (ep0 < nEp && usable(ep0, e0, kernel)) {
+          sEp = ep0;
+          sE = e0;
+          sK = kernel;
+        }
+        for (int k = 0; k < nMom && sK < 0; ++k)
+          for (int e = 0; e < nE - 1 && sK < 0; ++e)
+            for (int ep = e + 1; ep < nEp; ++ep)
+              if (usable(ep, e, k)) {
+                sEp = ep;
+                sE = e;
+                sK = k;
+                break;
+              }
+      }
+      check(sK >= 0,
+            tag + " detailed balance: a non-vacuous upper-triangle point exists "
+                  "(finite non-negligible swapped primitive, Boltzmann factor "
+                  "finite/positive/off 1)");
+      if (sK >= 0) {
+        const Real OSk = os_at(sK);
+        const Real lower = prim(sE, sEp, sK, OSk);  // Phi(iE, iEp): SWAPPED
+        const Real fac = factor(sEp, sE);
+        const Real fill = wli::NESDetailedBalanceFillPoint(
+            LogTs[iT], LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, sEp, sE,
+            nEp, nE, sK, nMom, OSk, tbl, E, TMeV);
+        check(wli::is_close(fill, lower * fac, wli::rtol_parity,
+                            wli::atol_default),
+              tag + " detailed balance: upper-triangle fill == swapped-index "
+                    "primitive * exp((E[iE]-E[iEp])/(k_B*T)) (1e-12)");
+        // Sign/index-order guard: the reciprocal factor (swapped subtraction)
+        // must NOT reproduce the fill.
+        const Real recip = lower * std::exp(-(E[sE] - E[sEp]) / TMeV);
+        check(!wli::is_close(fill, recip, wli::rtol_parity, wli::atol_default),
+              tag + " detailed balance: fill != swapped-index primitive * "
+                    "exp((E[iEp]-E[iE])/(k_B*T)) (swapped-subtraction guard)");
+        check(fac < Real(1),
+              tag + " detailed balance: Boltzmann factor < 1 for iEp > iE "
+                    "(upper triangle is suppressed; E increases with index)");
+      }
+
+      // Diagonal iEp == iE is the fill's documented fixed point
+      // (wli_opacity_nes_pair.H:186-191, spec:203): E[iE]-E[iEp] is exactly 0,
+      // exp(0.0) is exactly 1.0 and the multiply is exact, so an EXACT == is
+      // justified on identical primitive arguments. Pick a diagonal point whose
+      // primitive is non-zero so the identity is not a vacuous 0 == 0.
+      int dI = -1, dK = -1;
+      {
+        auto dusable = [&](int d, int k) {
+          const Real p = prim(d, d, k, os_at(k));
+          return std::isfinite(p) && p != Real(0);
+        };
+        if (dusable(nE / 2, kernel)) {
+          dI = nE / 2;
+          dK = kernel;
+        }
+        for (int k = 0; k < nMom && dI < 0; ++k)
+          for (int d = 0; d < nE; ++d)
+            if (dusable(d, k)) {
+              dI = d;
+              dK = k;
+              break;
+            }
+      }
+      check(dI >= 0,
+            tag + " detailed balance: a non-zero diagonal point exists (the "
+                  "fixed-point identity is not a vacuous 0 == 0)");
+      if (dI >= 0) {
+        const Real OSd = os_at(dK);
+        check(wli::NESDetailedBalanceFillPoint(
+                  LogTs[iT], LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta,
+                  dI, dI, nEp, nE, dK, nMom, OSd, tbl, E, TMeV) ==
+                  prim(dI, dI, dK, OSd),
+              tag + " detailed balance: diagonal iEp==iE returns the primitive "
+                    "value unchanged (factor exp(0) == 1, exact)");
+      }
+    } else if (energyOk) {
+      // Pair crossing symmetry (spec:158-174, Bruenn 1985 Eq. C64): an EXACT
+      // RELABELING — transpose the two energy indices AND exchange the in-pair /
+      // cross-pair components (Ji <-> Jii). No Boltzmann factor, no E/T
+      // arguments. 0-based Pair components iJi0=0, iJii0=1, iJi1=2, iJii1=3
+      // (weaklib wlOpacityFieldsModule.f90:25-28; no named constants exist in
+      // src/), so the i<->ii exchange is k ^ 1 — it never crosses the Legendre
+      // moment order. The caller supplies BOTH the already-swapped component
+      // index and ITS OWN offset element (OS is per-(opacity, kernel)).
+      // Unlike NES, the diagonal is NOT a fixed point here, so only iEp > iE is
+      // probed.
+      //
+      // Non-vacuity (mandatory: the mid-table Pair cell is an exact constant
+      // floor, where a naive == is a vacuous 0 == 0): require the swapped-index
+      // primitive to be finite, non-zero, and DIFFERENT from the un-transposed
+      // evaluation of the same component — proving the relabeling actually moves
+      // the read.
+      auto usable = [&](int ep, int e, int k) {
+        const int ks = k ^ 1;
+        if (ks >= nMom) return false;
+        const Real OSs = os_at(ks);
+        const Real p = prim(e, ep, ks, OSs);   // transposed (what the fill reads)
+        const Real q = prim(ep, e, ks, OSs);   // un-transposed, same component
+        return std::isfinite(p) && p != Real(0) && p != q;
+      };
+      int sEp = -1, sE = -1, sK = -1;
+      {
+        const int e0 = nE / 2, ep0 = nE / 2 + 1;
+        if (ep0 < nEp && usable(ep0, e0, kernel)) {
+          sEp = ep0;
+          sE = e0;
+          sK = kernel;
+        }
+        for (int k = 0; k < nMom && sK < 0; ++k)
+          for (int e = 0; e < nE - 1 && sK < 0; ++e)
+            for (int ep = e + 1; ep < nEp; ++ep)
+              if (usable(ep, e, k)) {
+                sEp = ep;
+                sE = e;
+                sK = k;
+                break;
+              }
+      }
+      check(sK >= 0,
+            tag + " crossing symmetry: a non-vacuous upper-triangle point "
+                  "exists (finite non-zero transposed read that differs from "
+                  "the un-transposed one)");
+      if (sK >= 0) {
+        const int kSwapped = sK ^ 1;             // Ji <-> Jii
+        const Real OSs = os_at(kSwapped);        // the offset of THAT component
+        const Real fill = wli::PairCrossingSymmetryFillPoint(
+            LogTs[iT], LogXs[iX], LogTs.data(), nT, LogXs.data(), nEta, sEp, sE,
+            nEp, nE, kSwapped, nMom, OSs, tbl);
+        // Exact ==: the leaf is a single delegating call with byte-identical
+        // arguments to the primitive at transposed energies (pure relabeling).
+        check(fill == prim(sE, sEp, kSwapped, OSs),
+              tag + " crossing symmetry: upper-triangle fill == primitive at "
+                    "transposed energies with the swapped component (exact "
+                    "relabeling)");
+        check(fill != prim(sEp, sE, kSwapped, OSs),
+              tag + " crossing symmetry: the fill differs from the "
+                    "un-transposed read of the same component (the relabeling "
+                    "genuinely moves the read)");
+      }
     }
   }
 }

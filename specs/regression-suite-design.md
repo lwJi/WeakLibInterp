@@ -17,7 +17,7 @@ Out of scope:
 - The per-channel interpolation arithmetic and physics invariants (each leaf spec owns its own; this spec only enumerates which entry points must be covered and how).
 - The tolerance numbers' derivation and the log-space/column-major conventions (see `fortran-parity-and-tolerances.md`).
 - The device/residency/launch mechanics of the entry points under test (see `amrex-device-interface.md`).
-- The on-disk HDF5 reader contract (see `table-format-and-io.md`).
+- The on-disk HDF5 reader contract (see `table-format-and-io.md`), including the contents of the optional EmAb `/EC_table` correction sub-table — no entry point interpolates it, so it carries no coverage cell (see the note under the coverage rows).
 - The build/link configuration of AMReX and the test target (see `build-integration.md`).
 - The **test framework, harness, directory layout, and assertion library** — explicitly implementation freedom (see below).
 
@@ -50,6 +50,8 @@ Every public device-callable entry point named across the leaf specs is a row of
 | 8 | Opacity **Brem** evaluate — `SumLogInterpolateSingleVariable_2D2D_Custom_Aligned` | [opacity-brem](./opacity-brem.md) | 5D `(E′, E, moment, ρ, T)`, `[1,1,28/3]` density decomposition |
 
 This table is the **closure list**: no channel or variant may be silently uncovered. The validator (`tools/validate_specs.sh`) asserts that every public entry-point routine named in a leaf spec appears as a row here, so adding a leaf entry point without adding its coverage row fails the gate.
+
+**Deliberately not a row — the EmAb `/EC_table` correction sub-table.** The optional `/EC_table` group carried by the EmAb table (the electron-capture rate/spectrum extras declared in `weaklib/Distributions/OpacitySource/wlOpacityFieldsModule.f90` and written by weaklib's table creator) is **out of this matrix's scope**. It is never read by any routine in `weaklib/Distributions/Library/wlInterpolationModule.F90`, so it has no `_Point` oracle, no defining leaf spec, and no interpolated quantity to assert a tolerance against; `opacity-emab-iso.md` covers only the `/EmAb` channel arrays. The suite therefore treats it as **table integrity only**: its presence is detected as an optional group whose absence must not fail the read (`table-format-and-io.md`), and the resulting flag is folded into the MPI table-load-consistency digest below at the exact tier — no in-bounds / on-edge / out-of-range / NaN-input cells apply. Should a leaf spec ever define a device entry point that interpolates this sub-table, *that entry point* — not the group — becomes a further row here and the closure gate applies to it as usual.
 
 ### The coverage columns (input regimes)
 

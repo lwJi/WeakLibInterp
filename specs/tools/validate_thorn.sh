@@ -110,6 +110,12 @@ require "$BUILD_SH" "WLI_AMREX_INSTALL_DIR" "build.sh"
 require "$BUILD_SH" "WLI_BUILD_TESTS=OFF"   "build.sh"
 require "$BUILD_SH" "CMAKE_INSTALL_PREFIX"  "build.sh"
 require "$BUILD_SH" "--target install"      "build.sh"
+# The build half of "find-or-build is never silent" (spec:69): a failing nested
+# configure or build/install must emit WLI-authored diagnostic text, not just a
+# bare set -e abort. Pin the marker pair and the ExternalLibraries phrase.
+require "$BUILD_SH" "BEGIN ERROR"                    "build.sh"
+require "$BUILD_SH" "END ERROR"                      "build.sh"
+require "$BUILD_SH" "could neither find nor build"   "build.sh"
 # MPI is never guessed, passed, or parsed by the thorn: WLI's own CMake
 # defaults WLI_AMREX_MPI=AUTO and adopts the AMReX_MPI fact find_package
 # reads from the prefix. Pin both halves of that contract — the thorn stays

@@ -36,6 +36,7 @@
 #include "wli_compare.H"
 #include "wli_eos.H"
 #include "wli_eos_inversion.H"
+#include "wli_eos_inversion_bounds.H"
 #include "wli_interp.H"
 #include "wli_opacity.H"
 #include "wli_real.H"
@@ -183,11 +184,8 @@ int main() {
           Emin = std::min(Emin, v);
           Emax = std::max(Emax, v);
         }
-    wli::EosInversionBounds b;
-    b.MinD = Ds[0];      b.MaxD = Ds[nD - 1];
-    b.MinX = Emin;       b.MaxX = Emax;
-    b.MinY = Ys[0];      b.MaxY = Ys[nY - 1];
-    b.initialized = true;
+    const wli::EosInversionBounds b =
+        wli::test::MakeBounds(Ds, nD, Ys, nY, Emin, Emax);
 
     auto invDEY = [&](Real D, Real E, Real Y) {
       return wli::ComputeTemperatureWith_DEY_NoGuess(D, E, Y, Ds, nD, Ts, nT, Ys,

@@ -55,6 +55,7 @@
 
 #include "wli_eos.H"
 #include "wli_eos_inversion.H"
+#include "wli_eos_inversion_bounds.H"
 #include "wli_io_eos.H"
 #include "wli_io_opacity.H"
 #include "wli_opacity.H"
@@ -479,11 +480,10 @@ void compute_entry_point_results(std::vector<double>& out) {
         Es[static_cast<std::size_t>(iD) + nD * (iT + nT * iY)] =
             1.0 + 0.3 * static_cast<double>(iD) + 2.0 * static_cast<double>(iT) +
             0.1 * static_cast<double>(iY);
-  wli::EosInversionBounds bnds;
-  bnds.initialized = true;
-  bnds.MinD = Ds[0];      bnds.MaxD = Ds[nD - 1];
-  bnds.MinY = Ys[0];      bnds.MaxY = Ys[nY - 1];
-  bnds.MinX = -1.0e30;    bnds.MaxX = 1.0e30;  // wide X bounds: exercise inversion
+
+  // wide X bounds: exercise inversion
+  const wli::EosInversionBounds bnds =
+      wli::test::MakeBounds(Ds, nD, Ys, nY, -1.0e30, 1.0e30);
   const Real targetE = wli::recover(3.5, kOS);  // an interior dependent value
   const wli::EosInversionResult inv = wli::ComputeTemperatureWith_DEY_NoGuess(
       qD, targetE, qY, Ds, nD, Ts, nT, Ys, nY, kOS, Es.data(), bnds);

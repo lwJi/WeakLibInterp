@@ -35,6 +35,7 @@
 
 #include "wli_eos.H"
 #include "wli_eos_inversion.H"
+#include "wli_eos_inversion_bounds.H"
 #include "wli_opacity_brem.H"
 #include "wli_opacity_emab_iso.H"
 #include "wli_opacity_nes_pair.H"
@@ -165,22 +166,9 @@ void test_inversion() {
   wli::ResidentTable<3> rt;
   auto view = upload_view<3>(rt, amrex::GpuArray<int, 3>{nD, nT, nY}, host);
 
-  wli::EosInversionBounds b;
-  b.MinD = Ds[0];
-  b.MaxD = Ds[nD - 1];
-  b.MinY = Ys[0];
-  b.MaxY = Ys[nY - 1];
-  {
-    double lo = wli::recover(host[0], OS), hi = lo;
-    for (double v : host) {
-      double r = wli::recover(v, OS);
-      lo = std::min(lo, r);
-      hi = std::max(hi, r);
-    }
-    b.MinX = lo;
-    b.MaxX = hi;
-  }
-  b.initialized = true;
+  const wli::EosInversionBounds b =
+      wli::test::MakeBoundsFromTable(Ds.data(), nD, Ys.data(), nY, host.data(),
+                                     host.size(), OS);
 
   // Query points: build X = forward(D,Tstar,Y) so each query is a genuine
   // dependent value in range; the per-point guess sits in Tstar's own cell.

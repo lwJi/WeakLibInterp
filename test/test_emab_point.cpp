@@ -29,8 +29,10 @@
 //
 // Hand-rolled harness (no GoogleTest/Catch2), synthetic table only (no HDF5),
 // mirroring test/test_eos_point.cpp. amrex::Initialize is not required: the
-// kernel is pure host scalar math. Real-.h5 production parity is deferred to the
-// regression-suite umbrella (no HDF5 loader exists yet); moment-slice
+// kernel is pure host scalar math. Real-table coverage (node identity, four-axis
+// boundary extrapolation, NaN propagation) is provided by run_emab in
+// test/test_production_tables.cpp, which loads the production .h5 via the
+// src/io/wli_io_opacity.{H,cpp} reader (read_emab_table); moment-slice
 // independence is Iso-only.
 
 #include <cmath>
