@@ -30,10 +30,10 @@ Current state: mature and functionally spec-complete. All 13 research slices thi
 
 ## Tier 12 — Hygiene & consolidation
 
-- [ ] Fix the stale "no HDF5 loader exists yet" comment in `test/test_emab_point.cpp`
+- [x] Fix the stale "no HDF5 loader exists yet" comment in `test/test_emab_point.cpp`
   - spec: regression-suite-design.md (comment hygiene; no behavior change)
   - tests: none — comment-only; existing suite stays green.
-  - notes: Found during the Tier 10 four-file comment fix (2026-07-07) but explicitly out of that item's scope. Same fix pattern: rewrite only the stale DEFERRED tail to forward-reference the real-table EmAb coverage in `test_production_tables.cpp` (via `read_emab_table` in `src/io/wli_io_opacity.{H,cpp}`), preserving the accurate "hand-rolled harness / synthetic table / no amrex::Initialize" leading clause; confirm the exact line range by grep before editing. This plan run pinpointed it: `test_emab_point.cpp:32-34` ("Real-.h5 production parity is deferred … no HDF5 loader exists yet" — false; `run_emab` at `test_production_tables.cpp:280-281`, registered `:821`); keep the trailing "moment-slice independence is Iso-only" note at the end of `:34` (still accurate). Do this AFTER the Tier 11 EmAb boundary item if both land, so the referenced coverage description is final. Optional same-cycle companion (not its own item, not independently testable): `src/core/wli.cpp:3-4`'s "Interpolator entry points are added by later increments" framing is stale — entry points landed as header-only kernels in `src/eos/`/`src/opacity/`.
+  - notes: DONE 2026-07-29. Both edits landed comment-only: `test_emab_point.cpp:32-36` now forward-references `run_emab` in `test_production_tables.cpp` via `read_emab_table` (`src/io/wli_io_opacity.H:120`, `.cpp:289`) using the Tier-10 idiom (`test_nes_pair_point.cpp:29-31`), phrased as node-identity/boundary/NaN coverage — deliberately NOT claiming rtol=1e-12 parity (that wording is correct only for NES/Pair and Brem). Companion `src/core/wli.cpp:3-5` rewritten to the durable reason (entry points are header-only `AMREX_GPU_HOST_DEVICE`, never compiled into that TU). Verified `tools/build.sh` + `tools/test.sh`: 89/89 passed, 6 expected SKIP-77 tables-gated cells; no `--tables` run needed (no real-table code touched). The kept "moment-slice independence is Iso-only" clause turned out itself inaccurate — recorded under Discovered since last plan, not fixed inline.
 
 - [ ] Consolidate the hand-built `EosInversionBounds` boilerplate into one test-side helper
   - spec: eos-inversion.md (§:163,169 — bounds representation deliberately free, so NO `src/` builder; CLAUDE.md anti-duplication discipline is the only pressure)
@@ -59,3 +59,13 @@ These are decisions/notes, NOT build increments — the responsible increment re
 - **Resolved by spec — do NOT build:** chunked-broadcast IMPLEMENTATION (`table-format-and-io.md:171`; every pinned dataset ~2 orders below 2^31−1; deferral comment already at `src/io/wli_io_bcast_detail.H:108-119`); any external Fortran numeric fixture/oracle (self-contained scheme by design, `fortran-parity-and-tolerances.md:135-142`); Cactus Verification #5 CUDA/HIP leg, official ET packaging, HDF5 C-API port, consumer thorn, ctest-inside-Cactus (`cactus-integration.md:15-19,91-98`); no combined MPI×GPU CI job; no parallel HDF5.
 
 ## Discovered since last plan
+
+- [ ] Comment hygiene: correct the "moment-slice independence is Iso-only" clause in `test/test_emab_point.cpp`
+  - spec: regression-suite-design.md (comment hygiene; no behavior change)
+  - tests: none — comment-only; existing suite stays green.
+  - notes: Found 2026-07-29 during the stale-loader-comment fix (kept verbatim that cycle by explicit constraint). The clause is inaccurate: `test/test_brem_point.cpp:169-184` exercises moment-slice independence for Brem (moments 0/1/2) alongside `test/test_iso_point.cpp:160-170`, so the property is Iso+Brem, not Iso-exclusive (EmAb has no moment axis at all).
+
+- [ ] Comment hygiene: refresh the stale "owned by later increments" tail in `src/core/wli_index.H:30`
+  - spec: regression-suite-design.md (comment hygiene; no behavior change)
+  - tests: none — comment-only; existing suite stays green.
+  - notes: Found 2026-07-29; same hygiene class as the `src/core/wli.cpp:3-4` fix that cycle but a different file, so left out of scope. The extents-metadata convention it defers to landed long ago — rewrite to state the durable ownership, mirroring the `wli.cpp` fix pattern.
