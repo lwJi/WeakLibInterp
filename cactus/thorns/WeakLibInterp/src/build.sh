@@ -83,8 +83,10 @@ esac
 #   CUDA: scrub CXX/CXXFLAGS/LDFLAGS; enable_language(CUDA) finds nvcc on
 #         PATH and the AMReX helper compiles the wli sources as CUDA with the
 #         prefix's recorded architectures.
-#   HIP : the first word of CXX (the hip-capable clang of the very Cactus
-#         config) becomes CMAKE_CXX_COMPILER, amdclang++ as fallback; its
+#   HIP : the compiler word of CXX — the first word that is not a launcher
+#         wrapper such as ccache (CI prepends one), i.e. the hip-capable
+#         clang of the very Cactus config — becomes CMAKE_CXX_COMPILER,
+#         amdclang++ as fallback; its
 #         ROCm root joins CMAKE_PREFIX_PATH so find_package(hip) resolves
 #         (docs/BUILD.md rocm mechanism). "-x hip" propagates transitively
 #         via AMReX::amrex -> hip::device.
@@ -98,8 +100,18 @@ case "${WLI_GPU_BACKEND}" in
         ;;
     HIP)
         WLI_CMAKE_LAUNCH=(env -u CXX -u CXXFLAGS -u LDFLAGS)
-        hip_cxx="${CXX%% *}"
-        command -v "${hip_cxx}" > /dev/null 2>&1 || hip_cxx=amdclang++
+        # A bare ${CXX%% *} would grab a launcher wrapper (e.g. a CI-derived
+        # "ccache clang++ -x hip") and hand CMake `ccache` as the compiler.
+        hip_cxx=""
+        for word in ${CXX}; do
+            case "$(basename "${word}")" in
+                ccache | sccache | distcc | icecc) continue ;;
+            esac
+            hip_cxx="${word}"
+            break
+        done
+        [ -n "${hip_cxx}" ] && command -v "${hip_cxx}" > /dev/null 2>&1 \
+            || hip_cxx=amdclang++
         WLI_CMAKE_EXTRA_ARGS+=("-DCMAKE_CXX_COMPILER=${hip_cxx}")
         # ROCm root = the ancestor of the compiler that carries lib/cmake/hip
         # (clang++ sits in <root>/llvm/bin, amdclang++ in <root>/bin).
