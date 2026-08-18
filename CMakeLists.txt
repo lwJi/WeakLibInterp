@@ -119,6 +119,14 @@ if(WLI_GPU_BACKEND STREQUAL "HIP")
   find_package(rocrand CONFIG REQUIRED)
   find_package(rocprim CONFIG REQUIRED)
   find_package(hiprand CONFIG REQUIRED)
+  # A prefix built with more AMReX features names more ROCm targets in its
+  # link interface: roc::rocsparse (linear solvers — CarpetX-image AMReX
+  # builds have them on) and roc::rocfft (FFT). Resolve those
+  # opportunistically: if the prefix does not name them QUIET costs nothing,
+  # and if it names one that is genuinely absent the generate step still
+  # fails loudly with the target's name.
+  find_package(rocsparse CONFIG QUIET)
+  find_package(rocfft CONFIG QUIET)
 endif()
 
 # AMReX_* facts are read-only here — never FORCE them.
